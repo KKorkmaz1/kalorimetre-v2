@@ -1,0 +1,39 @@
+.cursorrules
+# PROJECT: Kalorimetre (AI-Powered Professional Dietitian Companion)
+# ROLE: Senior Full-Stack Engineer, AI Integration Expert, UX Architect
+
+## CORE ARCHITECTURE & UX PARADIGM
+- Tech: React.js, Vite, Tailwind CSS, LocalStorage, Framer Motion (for animations).
+- Language: 100% TURKISH for all UI texts.
+- Themes: "Açık" (Light - #F8FAFC), "Koyu" (Dark - #0C0F1A), and "AMOLED Siyah" (#000000).
+- Design System: Premium minimal, rounded-2xl cards, emerald green (#10B981) primary. NO white gaps between calendar grid cells. Perfect flex-center alignment for all icons.
+
+## NEW CORE LOGIC: DIETITIAN VS MANUAL MODE
+- Two main operation modes defined in Onboarding:
+  1. Manual Mode (Mifflin-St Jeor calculated macros).
+  2. Dietitian Mode (AI OCR extracted meal plans from a photo/PDF).
+- Health Profile: Users must explicitly select health conditions (Diabetes, Hypertension, Allergies) which strictly filters all AI meal suggestions.
+
+## FEATURE SCOPE & REQUIREMENTS
+1. ONBOARDING & HEALTH PROFILE
+   - Auth screen (Google/Email).
+   - "Diyetisyen Listemi Yükle (OCR)" vs "Kendi Hedefimi Belirle" split.
+   - Comprehensive Health Profile selection step.
+2. DASHBOARD (Ana Panel & Timeline)
+   - TOP: "Günlük Özet & AI Asistan". Proactive limits warning (e.g., "Öğlende fazla protein alındı, akşam dengelenecek").
+   - MIDDLE: "Planlanan (Liste)" vs "Gerçekleşen (Tüketilen)" comparative timeline UI.
+   - ACTION: "Birebir Aynısını Yedim" (Ate Exactly This) quick-log button.
+3. LOG FOOD & DYNAMIC ALTERNATIVES
+   - When a user taps a planned meal, offer a "Bunun yerine ne yiyebilirim?" button.
+   - AI generates alternatives strictly based on the Health Profile (e.g., low GI for diabetics).
+4. HISTORY & ADVANCED ANALYTICS
+   - Monthly Heatmap Grid (Flawless CSS, no white gaps, perfectly centered icons).
+   - End-of-week adherence evaluation reports.
+   - Scale Receipt OCR: Placeholder UI to upload body comp scale receipts (Fat, Muscle) and visualize.
+5. PROFILE & SETTINGS
+   - Edit Health Profile, Theme, Target, and Water Goal.
+   - CRITICAL: When editing personal data, show the recalculated TDEE LIVE on the screen before saving.
+
+## CODING RULES
+- Build pure, modular Tailwind CSS components. Do not use absolute positioning from designs.
+- For OCR and AI Generation features (Diet list scanning, dynamic alternatives), build the full UI but use mock `setTimeout` functions returning simulated JSON data until backend API keys are connected.
