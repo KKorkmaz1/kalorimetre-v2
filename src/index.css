@@ -3,15 +3,93 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    @apply antialiased;
+  :root {
+    --ring-track:   #e2e8f0;
+    --ring-center:  #ffffff;
+    --scrollbar-bg: #f1f5f9;
+    --scrollbar-thumb: #cbd5e1;
   }
 
+  html.dark {
+    --ring-track:   #1E2640;
+    --ring-center:  #161B2E;
+    --scrollbar-bg: #0C0F1A;
+    --scrollbar-thumb: #2D3652;
+    color-scheme: dark;
+  }
+
+  html {
+    @apply antialiased;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+  }
+
+  html::-webkit-scrollbar       { width: 6px; }
+  html::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+  html::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 999px; }
+
   body {
-    @apply m-0 min-h-svh bg-slate-50 text-slate-900;
+    @apply m-0 min-h-svh bg-slate-50 text-slate-900 transition-colors duration-200;
+  }
+
+  html.dark body {
+    background-color: #0C0F1A;
+    color: #e2e8f0;
   }
 
   #root {
     @apply min-h-svh;
+  }
+
+  /* Smooth transitions on theme switch */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+  }
+  /* But never slow down transforms/opacity (animations, hovers) */
+  .no-theme-transition,
+  .no-theme-transition * {
+    transition-property: none !important;
+  }
+}
+
+@layer utilities {
+  /* ── Macro iconography & color-code system ────────────────────────── */
+  /* Calories  ⚡ emerald */
+  .macro-calorie      { @apply text-emerald-600 dark:text-emerald-400; }
+  .macro-calorie-bg   { @apply bg-emerald-50    dark:bg-emerald-900/20; }
+  .macro-calorie-bar  { @apply bg-emerald-500; }
+  .macro-calorie-ring { @apply ring-emerald-500/30; }
+
+  /* Protein   💪 indigo */
+  .macro-protein      { @apply text-indigo-600  dark:text-indigo-400; }
+  .macro-protein-bg   { @apply bg-indigo-50     dark:bg-indigo-900/20; }
+  .macro-protein-bar  { @apply bg-indigo-500; }
+
+  /* Carbs     🌾 amber */
+  .macro-carbs        { @apply text-amber-600   dark:text-amber-400; }
+  .macro-carbs-bg     { @apply bg-amber-50      dark:bg-amber-900/20; }
+  .macro-carbs-bar    { @apply bg-amber-500; }
+
+  /* Fat       💧 rose */
+  .macro-fat          { @apply text-rose-500    dark:text-rose-400; }
+  .macro-fat-bg       { @apply bg-rose-50       dark:bg-rose-900/20; }
+  .macro-fat-bar      { @apply bg-rose-500; }
+
+  /* ── Reusable interactive card pattern ─────────────────────────────── */
+  .card-interactive {
+    @apply cursor-pointer transition-all duration-200 hover:shadow-md active:scale-[0.98];
+  }
+
+  /* ── Dark surface shorthand ─────────────────────────────────────────── */
+  .surface {
+    @apply bg-white dark:bg-night-card;
+  }
+  .surface-muted {
+    @apply bg-slate-50 dark:bg-night-bg;
+  }
+  .border-subtle {
+    @apply border-slate-100 dark:border-night-border;
   }
 }

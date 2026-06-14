@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DietProvider, useDiet } from './context/DietContext'
 import OnboardingWizard from './components/OnboardingWizard'
 import History from './components/History'
@@ -46,12 +46,11 @@ const NAV_ITEMS = [
     ),
   },
   {
-    // Special tab: opens the modal directly instead of navigating
     id: 'add-food',
     label: 'Ekle',
     isAction: true,
     icon: () => (
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-200 transition-all active:scale-90">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/30 transition-all active:scale-90">
         <svg className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
         </svg>
@@ -83,13 +82,14 @@ const NAV_ITEMS = [
 
 /**
  * SVG circular progress ring.
- * Starts from 12 o'clock; green arc for normal, red when over target.
+ * Uses CSS custom properties (--ring-track, --ring-center) so it
+ * automatically reacts to the `dark` class toggle via index.css.
  */
 function CalorieRing({ consumed, target }) {
   const size = 112
   const sw   = 9
-  const r    = (size - sw * 2) / 2          // 47
-  const C    = 2 * Math.PI * r              // ~295
+  const r    = (size - sw * 2) / 2
+  const C    = 2 * Math.PI * r
   const pct  = target > 0 ? Math.min(1, consumed / target) : 0
   const offset = C * (1 - pct)
   const isOver = consumed > target && target > 0
@@ -98,9 +98,7 @@ function CalorieRing({ consumed, target }) {
   return (
     <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size}>
-        {/* Background track */}
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={sw} />
-        {/* Progress arc — rotated so 0% starts at top */}
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--ring-track)" strokeWidth={sw} />
         <circle
           cx={size / 2} cy={size / 2} r={r}
           fill="none"
@@ -116,32 +114,37 @@ function CalorieRing({ consumed, target }) {
           }}
         />
       </svg>
-      {/* Center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-extrabold leading-none text-slate-900">
+        <span className="text-xl font-extrabold leading-none text-slate-900 dark:text-slate-100">
           {consumed.toLocaleString('tr-TR')}
         </span>
-        <span className="mt-0.5 text-[10px] font-medium text-slate-400">kcal</span>
-        <span className="text-[9px] text-slate-300">/ {(target || 0).toLocaleString('tr-TR')}</span>
+        <span className="mt-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">kcal</span>
+        <span className="text-[9px] text-slate-300 dark:text-night-muted">/ {(target || 0).toLocaleString('tr-TR')}</span>
       </div>
     </div>
   )
 }
 
-/** Linear macro progress bar */
-function MacroBar({ label, consumed, target, barColor, labelColor }) {
-  const pct   = target > 0 ? Math.min(100, Math.round((consumed / target) * 100)) : 0
+/**
+ * Macro progress bar with the strict iconography color system:
+ *  Calories  ⚡ emerald · Protein 💪 indigo · Carbs 🌾 amber · Fat 💧 rose
+ */
+function MacroBar({ label, icon, consumed, target, barColor, labelColor }) {
+  const pct    = target > 0 ? Math.min(100, Math.round((consumed / target) * 100)) : 0
   const isOver = consumed > target && target > 0
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <span className={`text-xs font-semibold ${labelColor}`}>{label}</span>
-        <span className="text-xs text-slate-500">
-          <span className={`font-bold ${isOver ? 'text-red-500' : 'text-slate-800'}`}>{consumed}g</span>
+        <span className={`flex items-center gap-1 text-xs font-semibold ${labelColor}`}>
+          {icon && <span>{icon}</span>}
+          {label}
+        </span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          <span className={`font-bold ${isOver ? 'text-red-500' : 'text-slate-800 dark:text-slate-200'}`}>{consumed}g</span>
           {' / '}{target}g
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-night-muted">
         <div
           className={`h-full rounded-full transition-all duration-500 ${isOver ? 'bg-red-400' : barColor}`}
           style={{ width: `${pct}%` }}
@@ -158,7 +161,7 @@ function WaterTracker({ water, onToggle, goal }) {
       <svg className="h-4 w-4 flex-shrink-0 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
         <path fillRule="evenodd" d="M11.484 2.17a.75.75 0 011.032 0 11.209 11.209 0 017.877 10.58c0 5.799-4.338 10.5-9.893 10.5-5.554 0-9.893-4.701-9.893-10.5 0-4.368 2.667-8.112 6.503-9.858L11.484 2.17z" clipRule="evenodd" />
       </svg>
-      <span className="text-xs font-semibold text-slate-600">Su Takibi</span>
+      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Su Takibi</span>
       <div className="ml-auto flex gap-1">
         {Array.from({ length: goal }, (_, i) => (
           <button
@@ -166,56 +169,57 @@ function WaterTracker({ water, onToggle, goal }) {
             type="button"
             aria-label={`${i + 1}. bardak`}
             onClick={() => onToggle(i < water ? i : i + 1)}
-            className={`h-3 w-3 rounded-full transition-all ${
-              i < water ? 'bg-blue-500' : 'bg-slate-200 hover:bg-blue-200'
+            className={`h-3 w-3 cursor-pointer rounded-full transition-all ${
+              i < water ? 'bg-blue-500' : 'bg-slate-200 dark:bg-night-muted hover:bg-blue-200 dark:hover:bg-blue-900/40'
             }`}
           />
         ))}
       </div>
-      <span className="text-xs font-bold text-slate-500">{water}/{goal}</span>
+      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{water}/{goal}</span>
     </div>
   )
 }
 
-/** Meal type colour map */
+/** Meal type colour map — light + dark variants */
 const MEAL_META = {
-  Kahvaltı:  { bg: 'bg-amber-50',   badge: 'bg-amber-100 text-amber-700'   },
-  Öğle:      { bg: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700' },
-  Akşam:     { bg: 'bg-purple-50',  badge: 'bg-purple-100 text-purple-700'  },
-  'Ara Öğün':{ bg: 'bg-blue-50',    badge: 'bg-blue-100 text-blue-700'      },
+  Kahvaltı:   { bg: 'bg-amber-50 dark:bg-amber-900/20',   badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'   },
+  Öğle:       { bg: 'bg-emerald-50 dark:bg-emerald-900/20', badge: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' },
+  Akşam:      { bg: 'bg-purple-50 dark:bg-purple-900/20',  badge: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400'  },
+  'Ara Öğün': { bg: 'bg-blue-50 dark:bg-blue-900/20',      badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'      },
 }
 
 /** Single food-log card */
 function LogItem({ log, onDelete }) {
-  const meta = MEAL_META[log.mealType] ?? MEAL_META['Ara Öğün']
+  const meta    = MEAL_META[log.mealType] ?? MEAL_META['Ara Öğün']
   const hasExtras = log.protein > 0 || log.carbs > 0 || log.fat > 0
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-      {/* Coloured type indicator */}
+    <div className="flex items-center gap-3 rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 py-3 shadow-sm transition-all hover:shadow-md">
       <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${meta.bg}`}>
         <span className={`rounded-md px-1 py-0.5 text-[9px] font-extrabold ${meta.badge}`}>
           {log.mealType.slice(0, 2).toUpperCase()}
         </span>
       </div>
 
-      {/* Name + macros */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-slate-800">{log.name}</p>
+        <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{log.name}</p>
         {hasExtras && (
-          <p className="mt-0.5 text-[10px] text-slate-400">
-            P {log.protein}g · K {log.carbs}g · Y {log.fat}g
+          <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+            <span className="text-indigo-500">P</span> {log.protein}g ·{' '}
+            <span className="text-amber-500">K</span> {log.carbs}g ·{' '}
+            <span className="text-rose-400">Y</span> {log.fat}g
           </p>
         )}
       </div>
 
-      {/* Kcal + delete */}
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
-        <span className="text-sm font-extrabold text-slate-800">{log.kcal} kcal</span>
+        <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+          <span className="text-emerald-600 dark:text-emerald-400">⚡</span> {log.kcal}
+        </span>
         <button
           type="button"
           onClick={() => onDelete(log.id)}
-          className="flex h-5 w-5 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-red-50 hover:text-red-400"
+          className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-slate-300 dark:text-night-muted transition-colors hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-400"
           aria-label="Sil"
         >
           <XSmall />
@@ -230,12 +234,11 @@ function LogItem({ log, onDelete }) {
 function DashboardView({ onAddMeal }) {
   const { profile, consumed, logs, water, deleteLog, setWater } = useDiet()
 
-  const target     = profile ? ((profile.tdee ?? 0) + (profile.goalOffset ?? 0)) : 0
-  const macroTgt   = profile?.macros ?? { protein: 0, carbs: 0, fat: 0 }
-  const waterGoal  = profile?.waterGoal ?? 8
-  const remaining  = Math.max(0, target - consumed.kcal)
+  const target    = profile ? ((profile.tdee ?? 0) + (profile.goalOffset ?? 0)) : 0
+  const macroTgt  = profile?.macros ?? { protein: 0, carbs: 0, fat: 0 }
+  const waterGoal = profile?.waterGoal ?? 8
+  const remaining = Math.max(0, target - consumed.kcal)
 
-  // Reactive AI message
   let aiMessage
   if (!target) {
     aiMessage = 'Profilinizi tamamlayın, kalori hedefinizi belirleyelim.'
@@ -260,32 +263,32 @@ function DashboardView({ onAddMeal }) {
 
       {/* Header */}
       <header>
-        <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">{dateLabel}</p>
-        <h1 className="mt-0.5 text-2xl font-extrabold text-slate-900">Ana Panel</h1>
+        <p className="text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">{dateLabel}</p>
+        <h1 className="mt-0.5 text-2xl font-extrabold text-slate-900 dark:text-slate-100">Ana Panel</h1>
       </header>
 
       {/* AI suggestion card */}
-      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-4 shadow-sm">
+      <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-4 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 shadow-sm shadow-emerald-200">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 shadow-sm shadow-emerald-500/30">
             <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor">
               <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.818a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.845-.143z" clipRule="evenodd" />
             </svg>
           </div>
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
             Yapay Zeka Tavsiyesi
           </span>
           <span className="ml-auto rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-bold text-white">
             CANLI
           </span>
         </div>
-        <p className="text-sm leading-relaxed text-slate-700">{aiMessage}</p>
+        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{aiMessage}</p>
         {target > 0 && (
           <div className="mt-2.5 flex gap-4">
-            <span className="text-xs font-semibold text-emerald-600">
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               ⚡ {remaining.toLocaleString('tr-TR')} kcal kalan
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               Öğün: {logs.length} kayıt
             </span>
           </div>
@@ -293,27 +296,27 @@ function DashboardView({ onAddMeal }) {
       </div>
 
       {/* ── Main progress card ── */}
-      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card p-5 shadow-sm">
 
         {/* Ring + stats row */}
         <div className="flex items-center gap-4">
           <CalorieRing consumed={consumed.kcal} target={target} />
 
-          <div className="flex-1 min-w-0">
-            <p className="text-2xl font-extrabold text-slate-900 leading-none">
+          <div className="min-w-0 flex-1">
+            <p className="text-2xl font-extrabold leading-none text-slate-900 dark:text-slate-100">
               {remaining.toLocaleString('tr-TR')}
-              <span className="ml-1 text-sm font-medium text-slate-400">kcal kalan</span>
+              <span className="ml-1 text-sm font-medium text-slate-400 dark:text-slate-500">kcal kalan</span>
             </p>
             <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1">
               <div>
-                <p className="text-[10px] font-medium text-slate-400">Yağılan</p>
-                <p className="text-base font-extrabold text-slate-800">
+                <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">Yağılan</p>
+                <p className="text-base font-extrabold text-slate-800 dark:text-slate-100">
                   {consumed.kcal.toLocaleString('tr-TR')}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-medium text-slate-400">Hedef</p>
-                <p className="text-base font-extrabold text-slate-800">
+                <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">Hedef</p>
+                <p className="text-base font-extrabold text-slate-800 dark:text-slate-100">
                   {(target || 0).toLocaleString('tr-TR')}
                 </p>
               </div>
@@ -321,26 +324,26 @@ function DashboardView({ onAddMeal }) {
           </div>
         </div>
 
-        {/* Macro bars — only render when target macros are set */}
+        {/* Macro bars — strict color-code system */}
         {macroTgt.protein > 0 && (
           <div className="mt-4 space-y-3">
             <MacroBar
-              label="Protein"      consumed={consumed.protein} target={macroTgt.protein}
-              barColor="bg-blue-500"  labelColor="text-blue-600"
+              label="Protein"      icon="💪" consumed={consumed.protein} target={macroTgt.protein}
+              barColor="bg-indigo-500"   labelColor="text-indigo-600 dark:text-indigo-400"
             />
             <MacroBar
-              label="Karbonhidrat" consumed={consumed.carbs}   target={macroTgt.carbs}
-              barColor="bg-amber-500" labelColor="text-amber-600"
+              label="Karbonhidrat" icon="🌾" consumed={consumed.carbs}   target={macroTgt.carbs}
+              barColor="bg-amber-500"    labelColor="text-amber-600 dark:text-amber-400"
             />
             <MacroBar
-              label="Yağ"          consumed={consumed.fat}     target={macroTgt.fat}
-              barColor="bg-red-400"   labelColor="text-red-500"
+              label="Yağ"         icon="💧" consumed={consumed.fat}     target={macroTgt.fat}
+              barColor="bg-rose-500"     labelColor="text-rose-500 dark:text-rose-400"
             />
           </div>
         )}
 
         {/* Water tracker */}
-        <div className="mt-4 border-t border-slate-100 pt-4">
+        <div className="mt-4 border-t border-slate-100 dark:border-night-border pt-4">
           <WaterTracker water={water} onToggle={setWater} goal={waterGoal} />
         </div>
       </div>
@@ -348,11 +351,11 @@ function DashboardView({ onAddMeal }) {
       {/* Today's meal list */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-extrabold text-slate-800">Bugünün Öğünleri</h2>
+          <h2 className="text-sm font-extrabold text-slate-800 dark:text-slate-200">Bugünün Öğünleri</h2>
           <button
             type="button"
             onClick={onAddMeal}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-extrabold text-white shadow-sm shadow-emerald-200 transition-all hover:bg-emerald-600 active:scale-95"
+            className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-extrabold text-white shadow-sm shadow-emerald-500/30 transition-all hover:bg-emerald-600 hover:shadow-md active:scale-95"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -362,25 +365,24 @@ function DashboardView({ onAddMeal }) {
         </div>
 
         {logs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-              <svg className="h-6 w-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <div className="rounded-2xl border border-dashed border-slate-200 dark:border-night-border bg-white dark:bg-night-card p-6 text-center">
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-night-muted">
+              <svg className="h-6 w-6 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-slate-700">Henüz öğün yok</p>
-            <p className="mt-1 text-xs text-slate-400">Yukarıdaki "Öğün Ekle" butonunu kullanın</p>
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Henüz öğün yok</p>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Yukarıdaki "Öğün Ekle" butonunu kullanın</p>
           </div>
         ) : (
           <div className="space-y-2">
             {logs.map(log => (
               <LogItem key={log.id} log={log} onDelete={deleteLog} />
             ))}
-            {/* Daily total footer */}
-            <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-              <span className="text-xs font-bold text-slate-500">Günlük Toplam</span>
-              <span className="text-sm font-extrabold text-slate-900">
-                {consumed.kcal.toLocaleString('tr-TR')} kcal
+            <div className="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-night-muted px-4 py-3">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Günlük Toplam</span>
+              <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                <span className="text-emerald-500">⚡</span> {consumed.kcal.toLocaleString('tr-TR')} kcal
               </span>
             </div>
           </div>
@@ -400,14 +402,13 @@ function LogFoodView({ onAddMeal }) {
     <section className="space-y-4">
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Kayıt</p>
-          <h1 className="mt-1 text-2xl font-extrabold text-slate-900">Yemek Ekle</h1>
+          <p className="text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Kayıt</p>
+          <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-100">Yemek Ekle</h1>
         </div>
-        {/* FAB-style add button */}
         <button
           type="button"
           onClick={onAddMeal}
-          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-600 active:scale-95"
+          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 transition-all hover:bg-emerald-600 hover:shadow-xl active:scale-95"
           aria-label="Öğün ekle"
         >
           <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -417,18 +418,18 @@ function LogFoodView({ onAddMeal }) {
       </header>
 
       {logs.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50">
+        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-night-border bg-white dark:bg-night-card p-8 text-center shadow-sm">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-900/20">
             <svg className="h-7 w-7 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-sm font-semibold text-slate-700">Bugün henüz kayıt yok</p>
-          <p className="mt-1 text-xs text-slate-400">Sağ üstteki "+" butonunu kullanın</p>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Bugün henüz kayıt yok</p>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Sağ üstteki "+" butonunu kullanın</p>
           <button
             type="button"
             onClick={onAddMeal}
-            className="mt-4 rounded-2xl bg-emerald-500 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-600 active:scale-95"
+            className="mt-4 cursor-pointer rounded-2xl bg-emerald-500 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/30 transition-all hover:bg-emerald-600 active:scale-95"
           >
             İlk Öğünü Ekle
           </button>
@@ -440,20 +441,20 @@ function LogFoodView({ onAddMeal }) {
               <LogItem key={log.id} log={log} onDelete={deleteLog} />
             ))}
           </div>
-          {/* Day total summary */}
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Günlük Toplam</p>
+          {/* Day total summary — macro color-code system */}
+          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Günlük Toplam</p>
             <div className="mt-2 grid grid-cols-4 gap-2 text-center">
               {[
-                { label: 'Kalori',  value: consumed.kcal,    unit: 'kcal', color: 'text-emerald-700' },
-                { label: 'Protein', value: consumed.protein, unit: 'g',    color: 'text-blue-600'    },
-                { label: 'Karb',    value: consumed.carbs,   unit: 'g',    color: 'text-amber-600'   },
-                { label: 'Yağ',     value: consumed.fat,     unit: 'g',    color: 'text-red-500'     },
-              ].map(({ label, value, unit, color }) => (
-                <div key={label} className="rounded-xl bg-white py-2 shadow-sm">
+                { label: 'Kalori',  value: consumed.kcal,    unit: 'kcal', color: 'text-emerald-700 dark:text-emerald-400', icon: '⚡' },
+                { label: 'Protein', value: consumed.protein, unit: 'g',    color: 'text-indigo-600 dark:text-indigo-400',  icon: '💪' },
+                { label: 'Karb',    value: consumed.carbs,   unit: 'g',    color: 'text-amber-600 dark:text-amber-400',    icon: '🌾' },
+                { label: 'Yağ',     value: consumed.fat,     unit: 'g',    color: 'text-rose-500 dark:text-rose-400',      icon: '💧' },
+              ].map(({ label, value, unit, color, icon }) => (
+                <div key={label} className="rounded-xl bg-white dark:bg-night-card py-2 shadow-sm">
                   <p className={`text-lg font-extrabold ${color}`}>{value}</p>
-                  <p className="text-[10px] text-slate-400">{unit}</p>
-                  <p className="text-[10px] font-medium text-slate-500">{label}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500">{unit}</p>
+                  <p className="text-[9px] font-medium text-slate-500 dark:text-slate-400">{icon} {label}</p>
                 </div>
               ))}
             </div>
@@ -467,8 +468,8 @@ function LogFoodView({ onAddMeal }) {
 // ─── Main app shell ───────────────────────────────────────────────────────────
 
 function MainApp() {
-  const [activeTab,  setActiveTab]  = useState('dashboard')
-  const [showModal,  setShowModal]  = useState(false)
+  const [activeTab, setActiveTab] = useState('dashboard')
+  const [showModal, setShowModal] = useState(false)
 
   function renderView() {
     switch (activeTab) {
@@ -481,14 +482,73 @@ function MainApp() {
   }
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-app flex-col bg-slate-50">
-      <main className="flex-1 px-4 pb-28 pt-6">
-        {renderView()}
-      </main>
+    <div className="min-h-svh bg-slate-50 dark:bg-night-bg">
 
-      {/* 5-item bottom nav */}
+      {/* ── Desktop sidebar (lg and up) ──────────────────────────────────── */}
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 lg:flex lg:w-64 lg:flex-col border-r border-slate-200 dark:border-night-border bg-white dark:bg-night-card">
+
+        {/* Brand mark */}
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-100 dark:border-night-border px-6">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 shadow-sm shadow-emerald-500/30">
+            <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+              <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.818a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.845-.143z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <span className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-slate-100">Kalorimetre</span>
+        </div>
+
+        {/* Sidebar nav */}
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-5">
+          {NAV_ITEMS.map(({ id, label, icon, isAction }) => {
+            if (isAction) {
+              return (
+                <button
+                  key={id} type="button" onClick={() => setShowModal(true)}
+                  className="mt-2 flex cursor-pointer items-center gap-3 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-md shadow-emerald-500/30 transition-all hover:bg-emerald-600 hover:shadow-lg active:scale-95"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                  </svg>
+                  {label}
+                </button>
+              )
+            }
+            const active = activeTab === id
+            return (
+              <button
+                key={id} type="button" onClick={() => setActiveTab(id)}
+                className={`flex cursor-pointer items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
+                  active
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-night-muted hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                {icon(active)}
+                {label}
+                {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Sidebar footer hint */}
+        <div className="border-t border-slate-100 dark:border-night-border px-6 py-4">
+          <p className="text-[10px] text-slate-400 dark:text-slate-600 font-medium">
+            Kalorimetre v1.0 · AI Destekli
+          </p>
+        </div>
+      </aside>
+
+      {/* ── Page content (shifts right on desktop) ── */}
+      <div className="lg:pl-64">
+        <main className="mx-auto max-w-app px-4 pb-28 pt-6 lg:max-w-2xl lg:px-8 lg:pb-10 lg:pt-8">
+          {renderView()}
+        </main>
+      </div>
+
+      {/* ── Mobile bottom nav (hidden on desktop) ── */}
       <nav
-        className="fixed bottom-0 left-1/2 z-10 w-full max-w-app -translate-x-1/2 border-t border-slate-100 bg-white/95 shadow-2xl backdrop-blur-sm"
+        className="fixed bottom-0 left-0 right-0 z-10 border-t border-slate-200 dark:border-night-border bg-white/95 dark:bg-night-card/95 shadow-2xl backdrop-blur-sm lg:hidden"
         aria-label="Ana menü"
       >
         <ul className="grid grid-cols-5">
@@ -500,16 +560,16 @@ function MainApp() {
                   type="button"
                   onClick={() => isAction ? setShowModal(true) : setActiveTab(id)}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex w-full flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors ${
+                  className={`flex w-full cursor-pointer flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors ${
                     isAction
                       ? 'text-emerald-600'
                       : active
-                        ? 'text-emerald-600'
-                        : 'text-slate-400 hover:text-slate-600'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
                   }`}
                 >
                   {icon(active)}
-                  <span className={isAction ? 'text-emerald-600 font-bold' : ''}>{label}</span>
+                  <span className={isAction ? 'font-bold text-emerald-600' : ''}>{label}</span>
                   {active && <span className="h-0.5 w-4 rounded-full bg-emerald-500" aria-hidden="true" />}
                 </button>
               </li>
@@ -518,7 +578,6 @@ function MainApp() {
         </ul>
       </nav>
 
-      {/* Global add-meal bottom sheet */}
       <AddMealModal isOpen={showModal} onClose={() => setShowModal(false)} />
     </div>
   )
@@ -529,16 +588,30 @@ function MainApp() {
 function AppContent() {
   const { profile, updateProfile } = useDiet()
 
-  // undefined = context is still hydrating from localStorage
+  // Apply / remove `dark` class on <html> whenever the saved theme changes
+  useEffect(() => {
+    const theme = profile?.theme ?? 'light'
+    const isDark = theme === 'dark' || theme === 'amoled'
+    document.documentElement.classList.toggle('dark', isDark)
+    // AMOLED: override background to pure black via inline style
+    if (theme === 'amoled') {
+      document.documentElement.style.setProperty('--bg-amoled', '#000000')
+      document.body.style.backgroundColor = '#000000'
+    } else if (theme === 'dark') {
+      document.body.style.backgroundColor = '#0C0F1A'
+    } else {
+      document.body.style.backgroundColor = ''
+    }
+  }, [profile?.theme])
+
   if (profile === undefined) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-500" />
+      <div className="flex min-h-svh items-center justify-center bg-white dark:bg-night-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 dark:border-night-border border-t-emerald-500" />
       </div>
     )
   }
 
-  // null = new user, no profile saved yet
   if (profile === null) {
     return <OnboardingWizard onComplete={updateProfile} />
   }
