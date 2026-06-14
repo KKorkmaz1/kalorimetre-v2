@@ -3,8 +3,12 @@ import { useState } from 'react'
 export function BodyCompInput({ label, value, onChange, unit, placeholder }) {
   const [focused, setFocused] = useState(false)
   return (
-    <div className={`rounded-2xl border-2 px-4 py-3 transition-all ${focused ? 'border-emerald-400' : 'border-slate-200'}`}>
-      <label className="block text-[10px] font-bold uppercase text-slate-400">{label}</label>
+    <div className={`rounded-2xl border-2 px-4 py-3 transition-all bg-white dark:bg-night-card ${
+      focused
+        ? 'border-emerald-400 dark:border-emerald-500'
+        : 'border-slate-200 dark:border-night-border'
+    }`}>
+      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">{label}</label>
       <div className="flex items-baseline gap-1.5">
         <input
           type="number" inputMode="decimal" min="0" step="0.1"
@@ -12,9 +16,9 @@ export function BodyCompInput({ label, value, onChange, unit, placeholder }) {
           onChange={e => onChange(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          className="w-full bg-transparent text-2xl font-extrabold text-slate-900 outline-none placeholder:text-slate-200"
+          className="w-full bg-transparent text-2xl font-extrabold text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-200 dark:placeholder:text-night-muted"
         />
-        <span className="text-sm font-semibold text-slate-400">{unit}</span>
+        <span className="text-sm font-semibold text-slate-400 dark:text-slate-500">{unit}</span>
       </div>
     </div>
   )
@@ -51,22 +55,23 @@ export default function BodyComposition({ bodyComp, onChange, bmi, onSave, saveS
       </div>
 
       {bmi > 0 && bmiInfo && (
-        <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+        <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-night-muted px-4 py-3">
           <div>
-            <p className="text-[10px] font-bold uppercase text-slate-400">VKİ (BMI)</p>
-            <p className="text-2xl font-extrabold text-slate-900">{bmi}</p>
+            <p className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">VKİ (BMI)</p>
+            <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{bmi}</p>
           </div>
-          <span className={`rounded-xl px-3 py-1.5 text-sm font-extrabold ${bmiInfo.color} bg-white ring-1 ring-slate-100`}>
+          <span className={`rounded-xl px-3 py-1.5 text-sm font-extrabold ${bmiInfo.color} bg-white dark:bg-night-card ring-1 ring-slate-100 dark:ring-night-border`}>
             {bmiInfo.label}
           </span>
         </div>
       )}
 
-      <button type="button" onClick={onSave}
-        className={`mt-3 w-full rounded-2xl py-3.5 text-sm font-extrabold transition-all active:scale-95 ${
+      <button
+        type="button" onClick={onSave}
+        className={`mt-3 w-full cursor-pointer rounded-2xl py-3.5 text-sm font-extrabold transition-all active:scale-95 ${
           saveStatus === 'saved'
-            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200'
-            : 'bg-emerald-500 text-white shadow-lg shadow-emerald-200 hover:bg-emerald-600'
+            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+            : 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600'
         }`}>
         {saveStatus === 'saved' ? 'Kaydedildi!' : 'Ölçümü Kaydet'}
       </button>

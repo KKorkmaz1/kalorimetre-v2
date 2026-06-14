@@ -28,7 +28,9 @@ export function getLast7Days() {
 export function SparkLine({ history, valueKey, color }) {
   const pts = history.filter(d => (d[valueKey] ?? 0) > 0)
   if (pts.length < 2) return (
-    <p className="py-3 text-center text-xs text-slate-300">Trend için en az 2 ölçüm gerekiyor</p>
+    <p className="py-3 text-center text-xs text-slate-300 dark:text-slate-600">
+      Trend için en az 2 ölçüm gerekiyor
+    </p>
   )
   const values = pts.map(d => Number(d[valueKey]))
   const min = Math.min(...values); const max = Math.max(...values)
@@ -62,10 +64,10 @@ export default function WeeklyChart({ target }) {
     <div>
       <div className="flex items-end gap-1.5" style={{ height: 80 }}>
         {days.map((day, i) => {
-          const pct   = target > 0 ? day.kcal / target : 0
-          const barH  = maxVal > 0 ? Math.round((day.kcal / maxVal) * 72) : 0
+          const pct      = target > 0 ? day.kcal / target : 0
+          const barH     = maxVal > 0 ? Math.round((day.kcal / maxVal) * 72) : 0
           const barColor = day.kcal === 0
-            ? 'bg-slate-100'
+            ? 'bg-slate-100 dark:bg-night-muted'
             : pct > 1.07
               ? 'bg-red-400'
               : pct > 0.85
@@ -75,13 +77,13 @@ export default function WeeklyChart({ target }) {
           return (
             <div key={i} className="flex flex-1 flex-col items-center gap-1">
               {day.kcal > 0 && (
-                <span className="text-[8px] font-semibold text-slate-400">{day.kcal}</span>
+                <span className="text-[8px] font-semibold text-slate-400 dark:text-slate-500">{day.kcal}</span>
               )}
               <div
                 className={`w-full rounded-t-lg transition-all duration-500 ${barColor}`}
                 style={{ height: day.kcal === 0 ? 2 : barH }}
               />
-              <span className={`text-[10px] font-extrabold ${day.isToday ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <span className={`text-[10px] font-extrabold ${day.isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                 {day.label}
               </span>
             </div>
@@ -90,8 +92,10 @@ export default function WeeklyChart({ target }) {
       </div>
       {target > 0 && (
         <div className="mt-2 flex items-center gap-1.5">
-          <div className="h-px flex-1 border-t border-dashed border-slate-200" />
-          <span className="text-[9px] font-semibold text-slate-400">Hedef {target.toLocaleString('tr-TR')} kcal</span>
+          <div className="h-px flex-1 border-t border-dashed border-slate-200 dark:border-night-border" />
+          <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">
+            Hedef {target.toLocaleString('tr-TR')} kcal
+          </span>
         </div>
       )}
     </div>

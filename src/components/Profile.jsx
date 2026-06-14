@@ -81,14 +81,14 @@ export default function Profile() {
     <div className="space-y-6 pb-10">
 
       {/* ── HEADER ── */}
-      <div className="sticky top-0 z-10 -mx-4 border-b border-slate-100 bg-white/80 px-4 py-4 backdrop-blur-md">
-        <h1 className="text-xl font-extrabold text-slate-900">Profil & Gelişim</h1>
-        <p className="mt-0.5 text-xs text-slate-400">İlerleme takibi ve vücut analitiği</p>
+      <div className="sticky top-0 z-10 -mx-4 border-b border-slate-100 dark:border-night-border bg-white/80 dark:bg-night-card/80 px-4 py-4 backdrop-blur-md">
+        <h1 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">Profil & Gelişim</h1>
+        <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">İlerleme takibi ve vücut analitiği</p>
       </div>
 
       {/* ── ACTIVE TARGET CARD ── */}
       {dailyGoal > 0 && (
-        <div className="rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 p-5 text-white shadow-xl shadow-emerald-200">
+        <div className="rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 p-5 text-white shadow-xl shadow-emerald-500/25">
           <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-100">Güncel Hedef</p>
           <div className="mt-2 flex items-end justify-between">
             <div>
@@ -123,7 +123,7 @@ export default function Profile() {
       )}
 
       {/* ── 7-DAY CALORIE CHART ── */}
-      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+        <div className="rounded-3xl bg-white dark:bg-night-card p-5 shadow-sm ring-1 ring-slate-100 dark:ring-night-border">
         <SectionLabel text="Son 7 Gün Kalori" />
         <WeeklyChart target={dailyGoal} />
       </div>
@@ -131,13 +131,13 @@ export default function Profile() {
       {/* ── WEEKLY ADHERENCE ── */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Kayıt Günü',   val: weeklyStats.logged,   color: 'text-slate-900'   },
-          { label: 'Hedefe Uygun', val: weeklyStats.onTarget,  color: 'text-emerald-600' },
-          { label: 'Hafta İçinde', val: 7,                     color: 'text-blue-600'    },
+          { label: 'Kayıt Günü',   val: weeklyStats.logged,   color: 'text-slate-900 dark:text-slate-100'   },
+          { label: 'Hedefe Uygun', val: weeklyStats.onTarget,  color: 'text-emerald-600 dark:text-emerald-400' },
+          { label: 'Hafta İçinde', val: 7,                     color: 'text-blue-600 dark:text-blue-400'    },
         ].map(({ label, val, color }) => (
-          <div key={label} className="rounded-2xl bg-slate-50 px-3 py-4 text-center">
+          <div key={label} className="rounded-2xl bg-slate-50 dark:bg-night-muted px-3 py-4 text-center">
             <p className={`text-2xl font-extrabold ${color}`}>{val}</p>
-            <p className="mt-0.5 text-[10px] font-semibold text-slate-400">{label}</p>
+            <p className="mt-0.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">{label}</p>
           </div>
         ))}
       </div>
@@ -182,7 +182,7 @@ export default function Profile() {
       {history.length >= 2 && (
         <div>
           <SectionLabel text="İlerleme Trendleri" />
-          <div className="space-y-4 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+          <div className="space-y-4 rounded-3xl bg-white dark:bg-night-card p-5 shadow-sm ring-1 ring-slate-100 dark:ring-night-border">
             {[
               { key: 'weight', label: 'Kilo',        unit: 'kg', color: '#10B981' },
               { key: 'fat',    label: 'Yağ Oranı',   unit: '%',  color: '#F59E0B' },
@@ -194,7 +194,7 @@ export default function Profile() {
               return (
                 <div key={key}>
                   <div className="mb-1 flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-500">{label}</p>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{label}</p>
                     <p className="text-sm font-extrabold" style={{ color }}>
                       {lastVal}{unit}
                     </p>
@@ -213,14 +213,14 @@ export default function Profile() {
           <SectionLabel text="Geçmiş Hedefler" />
           <div className="space-y-2">
             {profile.goalHistory.slice(-5).reverse().map((g, i) => (
-              <div key={i} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+              <div key={i} className="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-night-muted px-4 py-3">
                 <div>
-                  <p className="text-sm font-bold text-slate-800">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
                     {g.goalLabel ?? 'Dengeli'} · {Number(g.dailyGoal).toLocaleString('tr-TR')} kcal
                   </p>
-                  <p className="text-[10px] text-slate-400">{g.date}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500">{g.date}</p>
                 </div>
-                <span className="text-xs text-slate-400">TDEE: {Number(g.tdee ?? 0).toLocaleString('tr-TR')}</span>
+                <span className="text-xs text-slate-400 dark:text-slate-500">TDEE: {Number(g.tdee ?? 0).toLocaleString('tr-TR')}</span>
               </div>
             ))}
           </div>
@@ -229,12 +229,12 @@ export default function Profile() {
 
       {/* Empty-state when no body comp data */}
       {!existingBodyComp.startingWeight && !profile?.dailyGoal && (
-        <div className="rounded-3xl border border-dashed border-slate-200 py-10 text-center">
-          <svg className="mx-auto h-10 w-10 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <div className="rounded-3xl border border-dashed border-slate-200 dark:border-night-border py-10 text-center">
+          <svg className="mx-auto h-10 w-10 text-slate-200 dark:text-night-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
           </svg>
-          <p className="mt-3 text-sm font-semibold text-slate-500">Henüz veri yok</p>
-          <p className="mt-1 text-xs text-slate-400">Ayarlar'dan hedefini belirle ve ölçüm girerek başla</p>
+          <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">Henüz veri yok</p>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Ayarlar'dan hedefini belirle ve ölçüm girerek başla</p>
         </div>
       )}
 
