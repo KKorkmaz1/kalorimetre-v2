@@ -15,13 +15,66 @@ const ACTIVITY_MULTIPLIERS = {
   sedanter: 1.2, az_aktif: 1.375, orta_aktif: 1.55, cok_aktif: 1.725, ekstra: 1.9,
 }
 
-const HEALTH_CONDITIONS = [
-  { id: 'diyabet',    label: 'Diyabet' },
-  { id: 'tansiyon',   label: 'Tansiyon' },
-  { id: 'colyak',     label: 'Çölyak' },
-  { id: 'laktoz',     label: 'Laktoz İntoleransı' },
-  { id: 'kuruyemis',  label: 'Kuruyemiş Alerjisi' },
-  { id: 'hicbiri',    label: 'Hiçbiri' },
+const DIET_PHILOSOPHIES = [
+  {
+    id: 'standart', label: 'Standart', desc: 'Dengeli, karma beslenme — et, sebze, tahıl',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'vegan', label: 'Vegan', desc: 'Tüm hayvansal ürünler hariç',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75M7.5 21h9M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'vejetaryen', label: 'Vejetaryen', desc: 'Et yok; süt, yumurta serbes',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'keto', label: 'Ketojenik', desc: 'Düşük karbonhidrat, yüksek yağ',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'akdeniz', label: 'Akdeniz', desc: 'Balık, zeytinyağı, baklagil, sebze',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+      </svg>
+    ),
+  },
+]
+
+const ALLERGENS = [
+  { id: 'gluten',         label: 'Gluten',          desc: 'Buğday, arpa, çavdar' },
+  { id: 'laktoz',         label: 'Laktoz',           desc: 'Süt ve süt ürünleri' },
+  { id: 'kuruyemis',      label: 'Kuruyemiş',        desc: 'Fındık, badem, ceviz…' },
+  { id: 'deniz_urunleri', label: 'Deniz Ürünleri',   desc: 'Balık, karides, midye' },
+  { id: 'yok',            label: 'Alerji / Kısıtım Yok', desc: 'Herhangi bir alerjim yok' },
+]
+
+const MEDICAL_CONDITIONS = [
+  { id: 'yok',             label: 'Yok',              desc: 'Bilinen kronik hastalık yok' },
+  { id: 'insulin_direnci', label: 'İnsülin Direnci',  desc: 'Karbonhidrat kontrolü gerektirir' },
+  { id: 'diyabet_tip1',    label: 'Diyabet (Tip 1)',  desc: 'İnsüline bağımlı diyabet' },
+  { id: 'diyabet_tip2',    label: 'Diyabet (Tip 2)',  desc: 'İnsülin direncine bağlı' },
+  { id: 'tansiyon',        label: 'Tansiyon',         desc: 'Yüksek / düşük kan basıncı' },
+  { id: 'kolesterol',      label: 'Kolesterol',       desc: 'Yüksek kolesterol seviyesi' },
+  { id: 'tiroid',          label: 'Tiroid',           desc: 'Tiroid bezi hastalığı' },
+  { id: 'pcos',            label: 'PCOS',             desc: 'Polikistik over sendromu' },
 ]
 
 const MOCK_MEALS = [
@@ -29,6 +82,15 @@ const MOCK_MEALS = [
   { time: 'Öğle',      meal: 'Izgara tavuk, kinoa, ıspanak salatası',        kcal: 520 },
   { time: 'Ara Öğün',  meal: 'Badem, taze meyve karışımı',                   kcal: 200 },
   { time: 'Akşam',     meal: 'Somon fileto, buharda brokoli, tatlı patates', kcal: 480 },
+]
+
+const STEP_META = [
+  { title: 'Temel Bilgiler',      subtitle: 'Kişisel istatistiklerinizi girin' },
+  { title: 'Diyet Felsefesi',     subtitle: 'Beslenme tarzınızı seçin' },
+  { title: 'Alerji & Dışlamalar', subtitle: 'Kaçınmanız gereken besinler' },
+  { title: 'Tıbbi Geçmiş',        subtitle: 'Sağlık durumunuzu belirtin' },
+  { title: 'Mod Seçimi',          subtitle: 'Nasıl başlamak istersiniz?' },
+  { title: 'Liste Yükle',         subtitle: 'Diyetisyen listenizi yükleyin' },
 ]
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -44,6 +106,16 @@ function calcTDEE({ gender, age, height, weight, activity }) {
   return Math.round(bmr * (ACTIVITY_MULTIPLIERS[activity] ?? 1.2))
 }
 
+// Derive backward-compatible healthConditions from new schema fields
+function deriveHealthConditions(allergies, medicalHistory) {
+  const c = []
+  if (allergies.includes('gluten'))                                          c.push('colyak')
+  if (allergies.includes('laktoz'))                                          c.push('laktoz')
+  if (allergies.includes('kuruyemis'))                                       c.push('kuruyemis')
+  if (medicalHistory.includes('diyabet_tip1') || medicalHistory.includes('diyabet_tip2')) c.push('diyabet')
+  return c
+}
+
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
 function CheckIcon({ className = 'h-3 w-3' }) {
@@ -57,7 +129,7 @@ function CheckIcon({ className = 'h-3 w-3' }) {
 function RadioDot({ selected }) {
   return (
     <span className={`mt-0.5 h-4 w-4 flex-shrink-0 rounded-full border-2 transition-all ${
-      selected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'
+      selected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600'
     }`} />
   )
 }
@@ -70,7 +142,7 @@ function ProgressBar({ current, total }) {
         <span className="text-xs font-medium text-slate-400">Adım {current} / {total}</span>
         <span className="text-xs font-bold text-emerald-600">{pct}%</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
         <div
           className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
           style={{ width: `${pct}%` }}
@@ -85,10 +157,9 @@ function ProgressBar({ current, total }) {
 function Step1BasicStats({ stats, onChange }) {
   return (
     <div className="space-y-7">
-
       {/* Gender */}
       <div>
-        <p className="mb-3 text-sm font-semibold text-slate-700">Cinsiyet</p>
+        <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Cinsiyet</p>
         <div className="grid grid-cols-2 gap-3">
           {[
             {
@@ -114,11 +185,13 @@ function Step1BasicStats({ stats, onChange }) {
                 key={id} type="button"
                 onClick={() => onChange({ ...stats, gender: id })}
                 className={`flex flex-col items-center gap-2.5 rounded-2xl border-2 py-5 transition-all ${
-                  active ? 'border-emerald-500 bg-emerald-50 text-emerald-600 shadow-sm shadow-emerald-100' : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
+                  active
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 shadow-sm shadow-emerald-100'
+                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 text-slate-400 hover:border-slate-300'
                 }`}
               >
                 {icon}
-                <span className={`text-sm font-semibold ${active ? 'text-emerald-700' : 'text-slate-600'}`}>{label}</span>
+                <span className={`text-sm font-semibold ${active ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{label}</span>
               </button>
             )
           })}
@@ -127,7 +200,7 @@ function Step1BasicStats({ stats, onChange }) {
 
       {/* Age / Height / Weight */}
       <div>
-        <p className="mb-3 text-sm font-semibold text-slate-700">Vücut Ölçüleri</p>
+        <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Vücut Ölçüleri</p>
         <div className="grid grid-cols-3 gap-3">
           {[
             { key: 'age',    label: 'Yaş',  unit: 'yıl', ph: '25',  min: 10,  max: 120 },
@@ -136,18 +209,18 @@ function Step1BasicStats({ stats, onChange }) {
           ].map(({ key, label, unit, ph, min, max }) => (
             <div
               key={key}
-              className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white px-2 py-3 shadow-sm"
+              className="flex flex-col items-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 px-2 py-3 shadow-sm"
             >
-              <p className="mb-1 text-xs font-medium text-slate-500">{label}</p>
+              <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
               <input
                 type="number" inputMode="numeric"
                 min={min} max={max}
                 value={stats[key]}
                 onChange={e => onChange({ ...stats, [key]: e.target.value })}
                 placeholder={ph}
-                className="w-full border-0 bg-transparent text-center text-xl font-bold text-slate-900 outline-none placeholder:text-slate-300"
+                className="w-full border-0 bg-transparent text-center text-xl font-bold text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
               />
-              <p className="mt-0.5 text-xs font-medium text-slate-400">{unit}</p>
+              <p className="mt-0.5 text-xs font-medium text-slate-400 dark:text-slate-500">{unit}</p>
             </div>
           ))}
         </div>
@@ -155,7 +228,7 @@ function Step1BasicStats({ stats, onChange }) {
 
       {/* Activity */}
       <div>
-        <p className="mb-3 text-sm font-semibold text-slate-700">Hareketlilik Düzeyi</p>
+        <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Hareketlilik Düzeyi</p>
         <div className="space-y-2">
           {ACTIVITY_LEVELS.map(({ id, label, desc }) => {
             const active = stats.activity === id
@@ -164,13 +237,15 @@ function Step1BasicStats({ stats, onChange }) {
                 key={id} type="button"
                 onClick={() => onChange({ ...stats, activity: id })}
                 className={`flex w-full items-center gap-4 rounded-xl border-2 px-4 py-3 text-left transition-all ${
-                  active ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-white hover:border-slate-200'
+                  active
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30'
+                    : 'border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-200 dark:hover:border-slate-600'
                 }`}
               >
                 <RadioDot selected={active} />
                 <div>
-                  <p className={`text-sm font-semibold ${active ? 'text-emerald-800' : 'text-slate-800'}`}>{label}</p>
-                  <p className="text-xs text-slate-500">{desc}</p>
+                  <p className={`text-sm font-semibold ${active ? 'text-emerald-800 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>{label}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
                 </div>
               </button>
             )
@@ -181,47 +256,43 @@ function Step1BasicStats({ stats, onChange }) {
   )
 }
 
-// ─── Step 2 — Health Profile ──────────────────────────────────────────────────
+// ─── Step 2 — Diet Philosophy ─────────────────────────────────────────────────
 
-function Step2HealthProfile({ conditions, onToggle }) {
+function Step2DietPhilosophy({ selected, onSelect }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-        <p className="text-xs leading-relaxed text-amber-800">
-          Bu bilgiler yapay zekanın size özel, güvenli öneriler sunması için kullanılır. Yalnızca cihazınızda saklanır ve hiçbir sunucuya gönderilmez.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        {HEALTH_CONDITIONS.map(({ id, label }) => {
-          const selected = conditions.includes(id)
-          const isNone = id === 'hicbiri'
+      <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+        Günlük beslenme tarzınızı seçin. Bu tercih, yapay zekanın size kişiselleştirilmiş öneriler sunmasını sağlar.
+      </p>
+      <div className="space-y-2.5">
+        {DIET_PHILOSOPHIES.map(({ id, label, desc, icon }) => {
+          const active = selected === id
           return (
             <button
               key={id} type="button"
-              onClick={() => onToggle(id)}
-              className={[
-                'flex items-center gap-3 rounded-2xl border-2 px-4 py-4 text-left transition-all',
-                isNone ? 'col-span-2 justify-center' : '',
-                selected
-                  ? isNone
-                    ? 'border-emerald-500 bg-emerald-50'
-                    : 'border-rose-400 bg-rose-50'
-                  : 'border-slate-200 bg-white hover:border-slate-300',
-              ].filter(Boolean).join(' ')}
+              onClick={() => onSelect(id)}
+              className={`flex w-full items-center gap-4 rounded-2xl border-2 px-4 py-3.5 text-left transition-all ${
+                active
+                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 shadow-sm'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600'
+              }`}
             >
-              <span className={`text-sm font-semibold ${
-                selected ? (isNone ? 'text-emerald-700' : 'text-rose-700') : 'text-slate-700'
+              <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-all ${
+                active
+                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40'
+                  : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
               }`}>
-                {label}
-              </span>
-              <span className={`ml-auto flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full transition-all ${
-                selected
-                  ? isNone ? 'bg-emerald-500' : 'bg-rose-400'
-                  : 'border-2 border-slate-200'
+                {icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-bold ${active ? 'text-emerald-800 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>{label}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
+              </div>
+              <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                active ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600'
               }`}>
-                {selected && <CheckIcon />}
-              </span>
+                {active && <CheckIcon className="h-3 w-3 text-white" />}
+              </div>
             </button>
           )
         })}
@@ -230,9 +301,113 @@ function Step2HealthProfile({ conditions, onToggle }) {
   )
 }
 
-// ─── Step 3 — Path Selection ──────────────────────────────────────────────────
+// ─── Step 3 — Allergies & Exclusions ─────────────────────────────────────────
 
-function Step3PathSelection({ mode, onSelect }) {
+function Step3Allergies({ allergies, onToggle }) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/20 px-4 py-3">
+        <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
+          Alerji ve beslenme kısıtlamalarınız yalnızca cihazınızda saklanır. Yapay zeka bu bilgileri güvenli öneriler sunmak için kullanır.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        {ALLERGENS.map(({ id, label, desc }) => {
+          const active = allergies.includes(id)
+          const isNone = id === 'yok'
+          return (
+            <button
+              key={id} type="button"
+              onClick={() => onToggle(id)}
+              className={[
+                'flex flex-col gap-1.5 rounded-2xl border-2 px-4 py-3.5 text-left transition-all',
+                isNone ? 'col-span-2' : '',
+                active
+                  ? isNone
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30'
+                    : 'border-rose-400 bg-rose-50 dark:bg-rose-900/30'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600',
+              ].join(' ')}
+            >
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-bold ${
+                  active
+                    ? isNone ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                    : 'text-slate-800 dark:text-slate-200'
+                }`}>{label}</p>
+                <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full transition-all ${
+                  active
+                    ? isNone ? 'bg-emerald-500' : 'bg-rose-400'
+                    : 'border-2 border-slate-200 dark:border-slate-600'
+                }`}>
+                  {active && <CheckIcon className="h-3 w-3 text-white" />}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Step 4 — Medical History ─────────────────────────────────────────────────
+
+function Step4MedicalHistory({ conditions, onToggle }) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-800/40 dark:bg-blue-900/20 px-4 py-3">
+        <p className="text-xs leading-relaxed text-blue-800 dark:text-blue-300">
+          Tıbbi geçmişiniz, yapay zekanın sağlığınıza uygun besin önerileri sunması için kritik öneme sahiptir. Bu bilgiler cihazınızda şifreli olarak saklanır.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        {MEDICAL_CONDITIONS.map(({ id, label, desc }) => {
+          const active = conditions.includes(id)
+          const isNone = id === 'yok'
+          return (
+            <button
+              key={id} type="button"
+              onClick={() => onToggle(id)}
+              className={[
+                'flex flex-col gap-1.5 rounded-2xl border-2 px-4 py-3.5 text-left transition-all',
+                isNone ? 'col-span-2' : '',
+                active
+                  ? isNone
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30'
+                    : 'border-violet-400 bg-violet-50 dark:bg-violet-900/30'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600',
+              ].join(' ')}
+            >
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-bold ${
+                  active
+                    ? isNone ? 'text-emerald-700 dark:text-emerald-400' : 'text-violet-700 dark:text-violet-400'
+                    : 'text-slate-800 dark:text-slate-200'
+                }`}>{label}</p>
+                <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full transition-all ${
+                  active
+                    ? isNone ? 'bg-emerald-500' : 'bg-violet-400'
+                    : 'border-2 border-slate-200 dark:border-slate-600'
+                }`}>
+                  {active && <CheckIcon className="h-3 w-3 text-white" />}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Step 5 — Path Selection ──────────────────────────────────────────────────
+
+function Step5PathSelection({ mode, onSelect }) {
   const PATHS = [
     {
       id: 'ocr',
@@ -261,7 +436,7 @@ function Step3PathSelection({ mode, onSelect }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-slate-500 dark:text-slate-400">
         Başlamak için bir yöntem seçin. Bunu istediğiniz zaman profilinizden değiştirebilirsiniz.
       </p>
       {PATHS.map(({ id, title, badge, desc, icon }) => {
@@ -272,28 +447,28 @@ function Step3PathSelection({ mode, onSelect }) {
             onClick={() => onSelect(id)}
             className={`group flex w-full items-start gap-4 rounded-2xl border-2 p-5 text-left transition-all duration-200 ${
               active
-                ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-100'
-                : 'border-slate-200 bg-white hover:border-emerald-200 hover:shadow-sm'
+                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 shadow-lg shadow-emerald-100/50'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-emerald-200 hover:shadow-sm'
             }`}
           >
             <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl transition-all ${
               active
-                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300'
-                : 'bg-slate-100 text-slate-500 group-hover:bg-emerald-50 group-hover:text-emerald-600'
+                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40'
+                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
             }`}>
               {icon}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className={`text-base font-bold ${active ? 'text-emerald-900' : 'text-slate-900'}`}>{title}</p>
+                <p className={`text-base font-bold ${active ? 'text-emerald-900 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-200'}`}>{title}</p>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  active ? 'bg-emerald-200 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  active ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                 }`}>{badge}</span>
               </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{desc}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{desc}</p>
             </div>
             <div className={`mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-              active ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'
+              active ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600'
             }`}>
               {active && <CheckIcon />}
             </div>
@@ -304,25 +479,24 @@ function Step3PathSelection({ mode, onSelect }) {
   )
 }
 
-// ─── Step 4 — OCR Upload ──────────────────────────────────────────────────────
+// ─── Step 6 — OCR Upload ──────────────────────────────────────────────────────
 
-function Step4OCRUpload({ ocrState, onSimulate }) {
+function Step6OCRUpload({ ocrState, onSimulate }) {
   const fileInputRef = useRef(null)
 
   if (ocrState === 'scanning') {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        {/* Spinner with brain icon */}
         <div className="relative mb-8">
-          <div className="h-24 w-24 animate-spin rounded-full border-4 border-slate-100 border-t-emerald-500" />
+          <div className="h-24 w-24 animate-spin rounded-full border-4 border-slate-100 dark:border-slate-700 border-t-emerald-500" />
           <div className="absolute inset-0 flex items-center justify-center">
             <svg className="h-10 w-10 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
             </svg>
           </div>
         </div>
-        <h3 className="text-xl font-extrabold text-slate-900">Analiz ediliyor...</h3>
-        <p className="mt-2 max-w-xs text-sm text-slate-500">
+        <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">Analiz ediliyor...</h3>
+        <p className="mt-2 max-w-xs text-sm text-slate-500 dark:text-slate-400">
           Yapay zeka listenizi tarayıp öğünleri ve kalori değerlerini tanımlıyor
         </p>
         <div className="mt-6 flex gap-2">
@@ -342,33 +516,31 @@ function Step4OCRUpload({ ocrState, onSimulate }) {
     const total = MOCK_MEALS.reduce((s, m) => s + m.kcal, 0)
     return (
       <div className="space-y-4">
-        {/* Success banner */}
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 shadow-md shadow-emerald-200">
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-900/20 p-4">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 shadow-md shadow-emerald-200/50">
             <CheckIcon className="h-5 w-5 text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-emerald-800">Listeniz başarıyla dijitalleştirildi!</p>
-            <p className="mt-0.5 text-xs text-emerald-600">{MOCK_MEALS.length} öğün tespit edildi · Toplam {total} kcal/gün</p>
+            <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">Listeniz başarıyla dijitalleştirildi!</p>
+            <p className="mt-0.5 text-xs text-emerald-600 dark:text-emerald-500">{MOCK_MEALS.length} öğün tespit edildi · Toplam {total} kcal/gün</p>
           </div>
         </div>
 
-        {/* Detected meals */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100 shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700 shadow-sm">
           {MOCK_MEALS.map(({ time, meal, kcal }, i) => (
             <div key={i} className="flex items-center justify-between px-4 py-3.5">
               <div className="min-w-0 flex-1 pr-3">
-                <p className="text-xs font-bold text-emerald-600">{time}</p>
-                <p className="mt-0.5 text-sm text-slate-700">{meal}</p>
+                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{time}</p>
+                <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-300">{meal}</p>
               </div>
-              <span className="flex-shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+              <span className="flex-shrink-0 rounded-full bg-slate-100 dark:bg-slate-700 px-3 py-1 text-xs font-bold text-slate-600 dark:text-slate-300">
                 {kcal} kcal
               </span>
             </div>
           ))}
-          <div className="flex items-center justify-between bg-emerald-50 px-4 py-3.5">
-            <p className="text-sm font-bold text-slate-700">Günlük Toplam</p>
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+          <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3.5">
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Günlük Toplam</p>
+            <span className="rounded-full bg-emerald-100 dark:bg-emerald-800/60 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">
               {total} kcal
             </span>
           </div>
@@ -380,11 +552,10 @@ function Step4OCRUpload({ ocrState, onSimulate }) {
   // idle
   return (
     <div className="space-y-4">
-      <p className="text-sm leading-relaxed text-slate-500">
-        Diyetisyeninizin verdiği beslenme listesini yükleyin veya fotoğraflayın. Yapay zeka, öğünleri ve kalori değerlerini otomatik tanıyacak.
+      <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+        Diyetisyeninizin verdiği beslenme listesini yükleyin veya fotoğraflayın. Yapay zeka öğünleri otomatik tanıyacak.
       </p>
 
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -393,36 +564,34 @@ function Step4OCRUpload({ ocrState, onSimulate }) {
         onChange={onSimulate}
       />
 
-      {/* Upload drop zone */}
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        className="group flex w-full flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 transition-all hover:border-emerald-400 hover:bg-emerald-50"
+        className="group flex w-full flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 px-6 py-10 transition-all hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
       >
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm transition-colors group-hover:bg-emerald-100">
-          <svg className="h-8 w-8 text-slate-400 transition-colors group-hover:text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white dark:bg-slate-700 shadow-sm transition-colors group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/40">
+          <svg className="h-8 w-8 text-slate-400 dark:text-slate-500 transition-colors group-hover:text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
           </svg>
         </div>
         <div className="text-center">
-          <p className="text-sm font-semibold text-slate-700 transition-colors group-hover:text-emerald-700">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 transition-colors group-hover:text-emerald-700 dark:group-hover:text-emerald-400">
             Dosya Seç veya Sürükle
           </p>
-          <p className="mt-1 text-xs text-slate-500">PNG, JPG veya PDF · Maks. 10 MB</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">PNG, JPG veya PDF · Maks. 10 MB</p>
         </div>
       </button>
 
       <div className="flex items-center gap-3">
-        <div className="flex-1 border-t border-slate-200" />
-        <span className="text-xs text-slate-400">ya da</span>
-        <div className="flex-1 border-t border-slate-200" />
+        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+        <span className="text-xs text-slate-400 dark:text-slate-500">ya da</span>
+        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
       </div>
 
-      {/* Camera button */}
       <button
         type="button"
         onClick={onSimulate}
-        className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-200 bg-white py-4 text-sm font-bold text-slate-700 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+        className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 py-4 text-sm font-bold text-slate-700 dark:text-slate-300 transition-all hover:border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-400"
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
@@ -434,36 +603,74 @@ function Step4OCRUpload({ ocrState, onSimulate }) {
   )
 }
 
+// ─── TDEE Summary Card (shown only at final step) ─────────────────────────────
+
+function TDEESummaryCard({ tdee, stats }) {
+  if (!tdee) return null
+  const protein = Math.round((tdee * 0.30) / 4)
+  const carbs   = Math.round((tdee * 0.40) / 4)
+  const fat     = Math.round((tdee * 0.30) / 9)
+
+  return (
+    <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-xl shadow-emerald-200/40 dark:shadow-emerald-900/40">
+      <div className="px-5 pt-5 pb-4">
+        <p className="text-xs font-semibold text-emerald-100">Hesaplanan Günlük Kalori Hedefiniz</p>
+        <div className="mt-1 flex items-end gap-1">
+          <span className="text-4xl font-extrabold text-white">{tdee.toLocaleString('tr-TR')}</span>
+          <span className="mb-1 text-sm font-medium text-emerald-200">kcal/gün</span>
+        </div>
+        <p className="mt-1 text-xs text-emerald-300">Mifflin-St Jeor · {stats.gender === 'erkek' ? 'Erkek' : 'Kadın'} · {stats.age} yaş · {stats.weight} kg · {stats.height} cm</p>
+      </div>
+      <div className="grid grid-cols-3 divide-x divide-emerald-400/40 border-t border-emerald-400/40 bg-emerald-600/30">
+        {[
+          { label: 'Protein', value: protein, unit: 'g' },
+          { label: 'Karbonhidrat', value: carbs, unit: 'g' },
+          { label: 'Yağ', value: fat, unit: 'g' },
+        ].map(({ label, value, unit }) => (
+          <div key={label} className="flex flex-col items-center py-3">
+            <span className="text-lg font-bold text-white">{value}<span className="text-xs font-normal text-emerald-200">{unit}</span></span>
+            <span className="text-xs text-emerald-300">{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Wizard orchestrator ──────────────────────────────────────────────────────
 
-const STEP_META = [
-  { title: 'Temel Bilgiler',  subtitle: 'Kişisel istatistiklerinizi girin' },
-  { title: 'Sağlık Profili',  subtitle: 'Sağlık durumunuzu belirtin' },
-  { title: 'Mod Seçimi',      subtitle: 'Nasıl başlamak istersiniz?' },
-  { title: 'Liste Yükle',     subtitle: 'Diyetisyen listenizi yükleyin' },
-]
-
 export default function OnboardingWizard({ onComplete }) {
-  const [step, setStep] = useState(1)
-  const [stats, setStats] = useState({ gender: '', age: '', height: '', weight: '', activity: '' })
-  const [healthConditions, setHealthConditions] = useState([])
-  const [mode, setMode] = useState('')
-  const [ocrState, setOcrState] = useState('idle') // 'idle' | 'scanning' | 'success'
+  const [step, setStep]               = useState(1)
+  const [stats, setStats]             = useState({ gender: '', age: '', height: '', weight: '', activity: '' })
+  const [dietPhilosophy, setDietPhilosophy] = useState('')
+  const [allergies, setAllergies]     = useState([])
+  const [medicalHistory, setMedical]  = useState([])
+  const [mode, setMode]               = useState('')
+  const [ocrState, setOcrState]       = useState('idle') // 'idle' | 'scanning' | 'success'
 
-  const totalSteps = mode === 'manual' ? 3 : 4
+  const totalSteps = mode === 'manual' ? 5 : 6
   const tdee = calcTDEE(stats)
   const meta = STEP_META[step - 1]
 
-  // ── Health toggle logic ───────────────────────────────────────────────────
-  function handleHealthToggle(id) {
-    if (id === 'hicbiri') {
-      setHealthConditions(prev => (prev.includes('hicbiri') ? [] : ['hicbiri']))
+  // ── Multi-select toggle helpers ───────────────────────────────────────────
+  function handleAllergyToggle(id) {
+    if (id === 'yok') {
+      setAllergies(prev => prev.includes('yok') ? [] : ['yok'])
     } else {
-      setHealthConditions(prev => {
-        const without = prev.filter(c => c !== 'hicbiri')
-        return without.includes(id)
-          ? without.filter(c => c !== id)
-          : [...without, id]
+      setAllergies(prev => {
+        const without = prev.filter(c => c !== 'yok')
+        return without.includes(id) ? without.filter(c => c !== id) : [...without, id]
+      })
+    }
+  }
+
+  function handleMedicalToggle(id) {
+    if (id === 'yok') {
+      setMedical(prev => prev.includes('yok') ? [] : ['yok'])
+    } else {
+      setMedical(prev => {
+        const without = prev.filter(c => c !== 'yok')
+        return without.includes(id) ? without.filter(c => c !== id) : [...without, id]
       })
     }
   }
@@ -471,15 +678,17 @@ export default function OnboardingWizard({ onComplete }) {
   // ── Validation ────────────────────────────────────────────────────────────
   function canProceed() {
     if (step === 1) return !!(stats.gender && stats.age && stats.height && stats.weight && stats.activity)
-    if (step === 2) return healthConditions.length > 0
-    if (step === 3) return !!mode
-    if (step === 4) return ocrState === 'success'
+    if (step === 2) return !!dietPhilosophy
+    if (step === 3) return allergies.length > 0
+    if (step === 4) return medicalHistory.length > 0
+    if (step === 5) return !!mode
+    if (step === 6) return ocrState === 'success'
     return true
   }
 
   // ── Navigation ────────────────────────────────────────────────────────────
   function handleNext() {
-    if (step === 3 && mode === 'manual') { finish(); return }
+    if (step === 5 && mode === 'manual') { finish(); return }
     if (step === totalSteps)            { finish(); return }
     setStep(s => s + 1)
   }
@@ -498,7 +707,10 @@ export default function OnboardingWizard({ onComplete }) {
   function finish() {
     const profile = {
       stats,
-      healthConditions,
+      dietPhilosophy,
+      allergies,
+      medicalHistory,
+      healthConditions: deriveHealthConditions(allergies, medicalHistory),
       mode,
       tdee: tdee ?? null,
       macros: tdee
@@ -514,11 +726,12 @@ export default function OnboardingWizard({ onComplete }) {
     onComplete(profile)
   }
 
-  const isLastStep = (step === 3 && mode === 'manual') || step === totalSteps
-  const isScanning = ocrState === 'scanning'
+  const isLastStep   = (step === 5 && mode === 'manual') || step === totalSteps
+  const isScanning   = ocrState === 'scanning'
+  const showTDEECard = isLastStep && !!tdee
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-app flex-col bg-white">
+    <div className="mx-auto flex min-h-svh max-w-app flex-col bg-white dark:bg-[#0C0F1A]">
 
       {/* Gradient accent bar */}
       <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400" />
@@ -532,42 +745,31 @@ export default function OnboardingWizard({ onComplete }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
             </svg>
           </div>
-          <span className="text-sm font-bold tracking-tight text-slate-800">Kalorimetre</span>
+          <span className="text-sm font-bold tracking-tight text-slate-800 dark:text-white">Kalorimetre</span>
         </div>
 
         <ProgressBar current={step} total={totalSteps} />
 
         <div className="mt-5">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{meta.title}</h1>
-          <p className="mt-1 text-sm text-slate-500">{meta.subtitle}</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">{meta.title}</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{meta.subtitle}</p>
         </div>
       </div>
 
       {/* ── Scrollable content ──────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-6 pb-4">
         {step === 1 && <Step1BasicStats stats={stats} onChange={setStats} />}
-        {step === 2 && <Step2HealthProfile conditions={healthConditions} onToggle={handleHealthToggle} />}
-        {step === 3 && <Step3PathSelection mode={mode} onSelect={setMode} />}
-        {step === 4 && <Step4OCRUpload ocrState={ocrState} onSimulate={startScan} />}
+        {step === 2 && <Step2DietPhilosophy selected={dietPhilosophy} onSelect={setDietPhilosophy} />}
+        {step === 3 && <Step3Allergies allergies={allergies} onToggle={handleAllergyToggle} />}
+        {step === 4 && <Step4MedicalHistory conditions={medicalHistory} onToggle={handleMedicalToggle} />}
+        {step === 5 && <Step5PathSelection mode={mode} onSelect={setMode} />}
+        {step === 6 && <Step6OCRUpload ocrState={ocrState} onSimulate={startScan} />}
       </div>
 
-      {/* ── Live TDEE card (step 1, once all fields are filled) ─────────────── */}
-      {step === 1 && tdee && (
+      {/* ── TDEE summary card — shown ONLY at the final step ────────────────── */}
+      {showTDEECard && (
         <div className="mx-6 mb-4">
-          <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-4 shadow-xl shadow-emerald-200">
-            <div>
-              <p className="text-xs font-semibold text-emerald-100">Günlük Kalori Hedefiniz</p>
-              <p className="mt-0.5 text-3xl font-extrabold text-white">
-                {tdee.toLocaleString('tr-TR')}
-                <span className="ml-1 text-base font-medium text-emerald-200">kcal</span>
-              </p>
-              <p className="mt-1 text-xs text-emerald-300">Mifflin-St Jeor · canlı hesaplama</p>
-            </div>
-            <svg className="h-10 w-10 text-white/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
-            </svg>
-          </div>
+          <TDEESummaryCard tdee={tdee} stats={stats} />
         </div>
       )}
 
@@ -578,7 +780,7 @@ export default function OnboardingWizard({ onComplete }) {
             <button
               type="button"
               onClick={handleBack}
-              className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-300 active:scale-95"
+              className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 transition-all hover:border-slate-300 active:scale-95"
             >
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
@@ -592,8 +794,8 @@ export default function OnboardingWizard({ onComplete }) {
             disabled={!canProceed() || isScanning}
             className={`flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all ${
               canProceed() && !isScanning
-                ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-200 hover:bg-emerald-600 active:scale-95'
-                : 'cursor-not-allowed bg-slate-100 text-slate-400'
+                ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-200/40 hover:bg-emerald-600 active:scale-95'
+                : 'cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
             }`}
           >
             {isScanning ? (
