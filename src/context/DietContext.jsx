@@ -136,6 +136,14 @@ export function DietProvider({ children }) {
     return newEntry
   }
 
+  function updateLog(id, updates) {
+    setDay(prev => {
+      const next = { ...prev, logs: prev.logs.map(l => l.id === id ? { ...l, ...updates } : l) }
+      persistDayStore(next)
+      return next
+    })
+  }
+
   function deleteLog(id) {
     setDay(prev => {
       const next = { ...prev, logs: prev.logs.filter(l => l.id !== id) }
@@ -178,7 +186,7 @@ export function DietProvider({ children }) {
 
   const value = {
     profile, macros, consumed, logs: day.logs, water: day.water, recipes,
-    updateProfile, addLog, deleteLog, setWater, saveRecipe, deleteRecipe,
+    updateProfile, addLog, updateLog, deleteLog, setWater, saveRecipe, deleteRecipe,
   }
 
   return <DietContext.Provider value={value}>{children}</DietContext.Provider>
