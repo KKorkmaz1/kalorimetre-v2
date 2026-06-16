@@ -6,6 +6,8 @@
  *   Protein   → ProteinIcon  (indigo)
  *   Carbs     → CarbsIcon    (amber)
  *   Fat       → FatIcon      (rose)
+ *   Fiber     → FiberIcon    (teal)
+ *   Sugar     → SugarIcon    (pink)
  *   Flame     → FlameIcon    (amber — avg kcal, history)
  *   Weight    → WeightIcon   (slate)
  *   Muscle    → MuscleIcon   (violet)
@@ -81,6 +83,28 @@ export function FatIcon({ className = 'h-3.5 w-3.5' }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
       <path fillRule="evenodd" d="M11.484 2.17a.75.75 0 011.032 0 11.209 11.209 0 017.877 10.58c0 5.799-4.338 10.5-9.893 10.5-5.554 0-9.893-4.701-9.893-10.5 0-4.368 2.667-8.112 6.503-9.858L11.484 2.17z" clipRule="evenodd" />
+    </svg>
+  )
+}
+
+/** Fiber — wheat stalk with grain. Color: teal. */
+export function FiberIcon({ className = 'h-3.5 w-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22V10" />
+      <path d="M12 10C12 10 8 9 7 6c3 0 5 4 5 4z" />
+      <path d="M12 14C12 14 16 13 17 10c-3 0-5 4-5 4z" />
+      <path d="M12 18C12 18 8 17 7 14c3 0 5 4 5 4z" />
+      <circle cx="12" cy="6" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+/** Sugar — crystal diamond. Color: pink. */
+export function SugarIcon({ className = 'h-3.5 w-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2L3 8.5l9 13.5 9-13.5L12 2z" />
     </svg>
   )
 }

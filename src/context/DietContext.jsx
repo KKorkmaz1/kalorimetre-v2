@@ -78,6 +78,8 @@ export function DietProvider({ children }) {
       protein: logs.reduce((s, l) => s + (Number(l.protein) || 0), 0),
       carbs:   logs.reduce((s, l) => s + (Number(l.carbs)   || 0), 0),
       fat:     logs.reduce((s, l) => s + (Number(l.fat)     || 0), 0),
+      fiber:   Math.round(logs.reduce((s, l) => s + (Number(l.fiber) || 0), 0) * 10) / 10,
+      sugar:   Math.round(logs.reduce((s, l) => s + (Number(l.sugar) || 0), 0) * 10) / 10,
     }
   }, [day.logs])
 
@@ -117,6 +119,8 @@ export function DietProvider({ children }) {
       protein:   Number(entry.protein) || 0,
       carbs:     Number(entry.carbs)   || 0,
       fat:       Number(entry.fat)     || 0,
+      fiber:     Number(entry.fiber)   || 0,
+      sugar:     Number(entry.sugar)   || 0,
     }
     // Preserve optional extended fields (basket items, serving info)
     if (Array.isArray(entry.items) && entry.items.length > 0) {

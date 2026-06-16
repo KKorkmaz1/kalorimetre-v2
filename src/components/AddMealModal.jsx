@@ -6,14 +6,13 @@ import SearchBar from './Meal/SearchBar'
 import BasketItem from './Meal/BasketItem'
 import MacroSummary from './Meal/MacroSummary'
 
-// ─── Scan simulation steps ────────────────────────────────────────────────────
+// ─── OpenFoodFacts API helper ─────────────────────────────────────────────────
 
-const SCAN_STEPS = [
-  { delay: 0,    msg: '📡 Kamera başlatılıyor...' },
-  { delay: 800,  msg: '🔍 Görüntü analiz ediliyor...' },
-  { delay: 1800, msg: '🤖 Yapay Zeka besin değerleri çıkarıyor...' },
-  { delay: 2800, msg: '✓ Analiz tamamlandı! Barkod / OCR özelliği yakında aktif olacak.' },
-]
+async function fetchOpenFoodFacts(barcode) {
+  const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  return res.json()
+}
 
 export default function AddMealModal({ isOpen, onClose, defaultMealType = null }) {
   const { addLog, profile } = useDiet()
@@ -29,7 +28,6 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [mealLabel, setMealLabel] = useState('')
   const [basket,    setBasket]    = useState([])
   const [error,     setError]     = useState('')
-  const [scanToast, setScanToast] = useState('')
 
   // Search sub-state
   const [query,   setQuery]   = useState('')
@@ -43,6 +41,16 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [mProt, setMProt] = useState('')
   const [mCarb, setMCarb] = useState('')
   const [mFat,  setMFat]  = useState('')
+  const [mFib,  setMFib]  = useState('')
+  const [mSug,  setMSug]  = useState('')
+
+  // Barcode sub-state
+  const [barcodeOpen,    setBarcodeOpen]    = useState(false)
+  const [barcodeInput,   setBarcodeInput]   = useState('')
+  const [barcodeLoading, setBarcodeLoading] = useState(false)
+  const [barcodeError,   setBarcodeError]   = useState('')
+  const [barcodeProduct, setBarcodeProduct] = useState(null)
+  const [barcodeGrams,   setBarcodeGrams]   = useState('100')
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -53,9 +61,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
 
   const basketTotals = useMemo(() => ({
     kcal:    basket.reduce((s, i) => s + i.kcal,    0),
-    protein: Math.round(basket.reduce((s, i) => s + i.protein, 0) * 10) / 10,
-    carbs:   Math.round(basket.reduce((s, i) => s + i.carbs,   0) * 10) / 10,
-    fat:     Math.round(basket.reduce((s, i) => s + i.fat,     0) * 10) / 10,
+    protein: Math.round(basket.reduce((s, i) => s + i.protein,        0) * 10) / 10,
+    carbs:   Math.round(basket.reduce((s, i) => s + i.carbs,          0) * 10) / 10,
+    fat:     Math.round(basket.reduce((s, i) => s + i.fat,            0) * 10) / 10,
+    fiber:   Math.round(basket.reduce((s, i) => s + (i.fiber || 0),   0) * 10) / 10,
+    sugar:   Math.round(basket.reduce((s, i) => s + (i.sugar || 0),   0) * 10) / 10,
   }), [basket])
 
   const healthImpact = useMemo(() => checkHealthImpact(basket, profile),       [basket, profile])
@@ -64,13 +74,60 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   // ── Early return (after all hooks) ────────────────────────────────────────
   if (!isOpen) return null
 
-  // ── Scan simulation ────────────────────────────────────────────────────────
-  function handleScan() {
-    setScanToast(SCAN_STEPS[0].msg)
-    SCAN_STEPS.slice(1).forEach(({ delay, msg }) => {
-      setTimeout(() => setScanToast(msg), delay)
-    })
-    setTimeout(() => setScanToast(''), 5000)
+  // ── Barcode API ────────────────────────────────────────────────────────────
+  async function handleFetchBarcode() {
+    const code = barcodeInput.trim()
+    if (!code) { setBarcodeError('Barkod numarası giriniz.'); return }
+    setBarcodeLoading(true)
+    setBarcodeError('')
+    setBarcodeProduct(null)
+    try {
+      const data = await fetchOpenFoodFacts(code)
+      if (data.status !== 1 || !data.product) {
+        setBarcodeError('Ürün bulunamadı. Barkodu kontrol edin veya manuel giriş yapın.')
+        return
+      }
+      const p = data.product
+      const n = p.nutriments || {}
+      const kcal100 = Math.round(
+        n['energy-kcal_100g'] ??
+        (n['energy-kj_100g'] ? n['energy-kj_100g'] / 4.184 : 0)
+      )
+      setBarcodeProduct({
+        name:      (p.product_name_tr || p.product_name || 'Bilinmeyen Ürün').trim(),
+        kcal100,
+        protein100: Math.round((n['proteins_100g']       || 0) * 10) / 10,
+        carbs100:   Math.round((n['carbohydrates_100g']  || 0) * 10) / 10,
+        fat100:     Math.round((n['fat_100g']            || 0) * 10) / 10,
+        fiber100:   Math.round((n['fiber_100g']          || 0) * 10) / 10,
+        sugar100:   Math.round((n['sugars_100g']         || 0) * 10) / 10,
+      })
+    } catch {
+      setBarcodeError('Bağlantı hatası. İnternet bağlantınızı kontrol edin.')
+    } finally {
+      setBarcodeLoading(false)
+    }
+  }
+
+  function addBarcodeToBasket() {
+    if (!barcodeProduct) return
+    const grams = Math.max(1, Number(barcodeGrams) || 100)
+    const r = grams / 100
+    setBasket(prev => [...prev, {
+      id:       crypto.randomUUID(),
+      foodId:   null,
+      foodName: barcodeProduct.name,
+      unit:     `${grams}g`,
+      qty:      1,
+      kcal:     Math.round(barcodeProduct.kcal100     * r),
+      protein:  Math.round(barcodeProduct.protein100  * r * 10) / 10,
+      carbs:    Math.round(barcodeProduct.carbs100    * r * 10) / 10,
+      fat:      Math.round(barcodeProduct.fat100      * r * 10) / 10,
+      fiber:    Math.round(barcodeProduct.fiber100    * r * 10) / 10,
+      sugar:    Math.round(barcodeProduct.sugar100    * r * 10) / 10,
+    }])
+    setBarcodeOpen(false); setBarcodeInput(''); setBarcodeProduct(null)
+    setBarcodeGrams('100'); setBarcodeError('')
   }
 
   // ── Basket actions ─────────────────────────────────────────────────────────
@@ -89,6 +146,8 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       protein:  preview.protein,
       carbs:    preview.carbs,
       fat:      preview.fat,
+      fiber:    0,
+      sugar:    0,
     }])
     setSelFood(null); setSelUnit(''); setQuery(''); setQty('1'); setError('')
   }
@@ -106,8 +165,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       protein:  Number(mProt) || 0,
       carbs:    Number(mCarb) || 0,
       fat:      Number(mFat)  || 0,
+      fiber:    Number(mFib)  || 0,
+      sugar:    Number(mSug)  || 0,
     }])
-    setMName(''); setMKcal(''); setMProt(''); setMCarb(''); setMFat(''); setError('')
+    setMName(''); setMKcal(''); setMProt(''); setMCarb(''); setMFat('')
+    setMFib(''); setMSug(''); setError('')
   }
 
   function removeFromBasket(id) {
@@ -123,9 +185,12 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       protein: basketTotals.protein,
       carbs:   basketTotals.carbs,
       fat:     basketTotals.fat,
+      fiber:   basketTotals.fiber,
+      sugar:   basketTotals.sugar,
       items:   basket.map(i => ({
         foodName: i.foodName, unit: i.unit, qty: i.qty,
         kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat,
+        fiber: i.fiber || 0, sugar: i.sugar || 0,
       })),
     })
     resetAll()
@@ -136,7 +201,9 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setBasket([]); setMealLabel(''); setMealType('Öğle'); setTab('search')
     setQuery(''); setSelFood(null); setSelUnit(''); setQty('1')
     setMName(''); setMKcal(''); setMProt(''); setMCarb(''); setMFat('')
-    setError(''); setScanToast('')
+    setMFib(''); setMSug(''); setError('')
+    setBarcodeOpen(false); setBarcodeInput(''); setBarcodeLoading(false)
+    setBarcodeError(''); setBarcodeProduct(null); setBarcodeGrams('100')
   }
 
   return (
@@ -226,33 +293,123 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         {/* ── SCROLLABLE CONTENT ── */}
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
 
-          {/* Scan toast */}
-          {scanToast && (
-            <div className={`flex items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
-              scanToast.startsWith('✓')
-                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
-            }`}>
-              <span className="text-base">{scanToast.startsWith('✓') ? '✅' : '⏳'}</span>
-              <span>{scanToast}</span>
-            </div>
-          )}
-
           {/* ═══ SEARCH TAB ═══ */}
           {tab === 'search' && (
             <>
               {/* Barkod / Yemek Tara */}
               <button
                 type="button"
-                onClick={handleScan}
-                className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/10 py-3.5 text-sm font-extrabold text-emerald-700 dark:text-emerald-400 transition-all hover:border-emerald-400 dark:hover:border-emerald-600 hover:from-emerald-100 dark:hover:from-emerald-900/30 active:scale-[0.98]"
+                onClick={() => { setBarcodeOpen(o => !o); setBarcodeError(''); setBarcodeProduct(null) }}
+                className={`flex w-full cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 border-dashed py-3.5 text-sm font-extrabold transition-all active:scale-[0.98] ${
+                  barcodeOpen
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
+                    : 'border-emerald-300 dark:border-emerald-700/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/10 text-emerald-700 dark:text-emerald-400 hover:border-emerald-400 dark:hover:border-emerald-600'
+                }`}
               >
                 <span className="text-xl leading-none">📷</span>
-                <span>Barkod / Yemek Tara</span>
+                <span>Barkod Tara</span>
                 <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-extrabold text-white uppercase tracking-wide">
-                  AI Beta
+                  OpenFoodFacts
                 </span>
               </button>
+
+              {/* Barcode input panel */}
+              {barcodeOpen && (
+                <div className="rounded-2xl border border-slate-200 dark:border-night-border bg-slate-50 dark:bg-night-muted p-4 space-y-3">
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Barkod Numarası
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={barcodeInput}
+                      onChange={e => { setBarcodeInput(e.target.value); setBarcodeError('') }}
+                      onKeyDown={e => e.key === 'Enter' && handleFetchBarcode()}
+                      placeholder="örn. 8690526430031"
+                      className="flex-1 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-night-muted focus:border-emerald-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleFetchBarcode}
+                      disabled={barcodeLoading}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {barcodeLoading ? (
+                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : 'Sorgula'}
+                    </button>
+                  </div>
+
+                  {/* Barcode error */}
+                  {barcodeError && (
+                    <p className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                      <span>❌</span> {barcodeError}
+                    </p>
+                  )}
+
+                  {/* Barcode product found */}
+                  {barcodeProduct && (
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-night-card p-3 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100 leading-tight">
+                            {barcodeProduct.name}
+                          </p>
+                          <p className="mt-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                            100g başına değerler
+                          </p>
+                        </div>
+                        <span className="flex-shrink-0 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+                          {barcodeProduct.kcal100} kcal
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1.5 text-center">
+                        {[
+                          { label: 'Protein', val: barcodeProduct.protein100, color: 'text-indigo-600 dark:text-indigo-400' },
+                          { label: 'Karb',    val: barcodeProduct.carbs100,   color: 'text-amber-600 dark:text-amber-400'  },
+                          { label: 'Yağ',     val: barcodeProduct.fat100,     color: 'text-rose-500 dark:text-rose-400'    },
+                          { label: 'Lif',     val: barcodeProduct.fiber100,   color: 'text-teal-600 dark:text-teal-400'    },
+                          { label: 'Şeker',   val: barcodeProduct.sugar100,   color: 'text-pink-600 dark:text-pink-400'    },
+                        ].map(({ label, val, color }) => (
+                          <div key={label} className="rounded-lg bg-slate-50 dark:bg-night-muted px-2 py-1.5">
+                            <p className={`text-[10px] font-bold ${color}`}>{label}</p>
+                            <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">{val}g</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5">
+                          Porsiyon (gram)
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min="1"
+                            value={barcodeGrams}
+                            onChange={e => setBarcodeGrams(e.target.value)}
+                            className="w-24 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={addBarcodeToBasket}
+                            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95"
+                          >
+                            <PlusIcon />
+                            Sepete Ekle · {Math.round(barcodeProduct.kcal100 * (Math.max(1, Number(barcodeGrams) || 100) / 100))} kcal
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <div className="h-px flex-1 bg-slate-100 dark:bg-night-border" />
@@ -303,6 +460,8 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                     { val: mProt, set: setMProt, label: 'Protein', color: 'text-indigo-600 dark:text-indigo-400', focus: 'focus-within:border-indigo-400' },
                     { val: mCarb, set: setMCarb, label: 'Karb',    color: 'text-amber-600 dark:text-amber-400',  focus: 'focus-within:border-amber-400'  },
                     { val: mFat,  set: setMFat,  label: 'Yağ',     color: 'text-rose-500 dark:text-rose-400',   focus: 'focus-within:border-rose-400'   },
+                    { val: mFib,  set: setMFib,  label: 'Lif',     color: 'text-teal-600 dark:text-teal-400',   focus: 'focus-within:border-teal-400'   },
+                    { val: mSug,  set: setMSug,  label: 'Şeker',   color: 'text-pink-600 dark:text-pink-400',   focus: 'focus-within:border-pink-400'   },
                   ].map(({ val, set, label, color, focus }) => (
                     <div key={label} className={`rounded-2xl border-2 border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-3 text-center transition-all ${focus}`}>
                       <label className={`block text-[10px] font-bold ${color}`}>{label}</label>

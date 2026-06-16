@@ -42,6 +42,7 @@ export default function HedefDuzenle({ onClose, backLabel = 'Ayarlar' }) {
   const [calories,   setCalories]   = useState(Number(profile?.dailyGoal) || systemKcal)
   const [proteinPct, setProteinPct] = useState(initP)
   const [carbsPct,   setCarbsPct]   = useState(initC)
+  const [waterGoal,  setWaterGoal]  = useState(Number(profile?.waterGoal ?? 8))
 
   const fatPct = Math.max(0, 100 - proteinPct - carbsPct)
 
@@ -72,15 +73,16 @@ export default function HedefDuzenle({ onClose, backLabel = 'Ayarlar' }) {
       goalOffset:   calories - (Number(profile?.tdee) || calories),
       macros,
       macroPercent: { protein: proteinPct, carbs: carbsPct, fat: fatPct },
+      waterGoal,
     })
     onClose()
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-50 dark:bg-night-bg">
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-50 dark:bg-[#0C0F1A]">
 
-      {/* Sticky header */}
-      <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-night-border bg-white/95 dark:bg-night-card/95 px-4 pt-4 pb-4 backdrop-blur-md">
+      {/* Header — flex-shrink-0 so it never scrolls away */}
+      <div className="flex-shrink-0 border-b border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 pt-4 pb-4">
         <button
           type="button"
           onClick={onClose}
@@ -93,6 +95,7 @@ export default function HedefDuzenle({ onClose, backLabel = 'Ayarlar' }) {
         <h1 className="mt-0.5 text-2xl font-extrabold text-slate-900 dark:text-slate-100">Hedefi Düzenle</h1>
       </div>
 
+      <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-app space-y-5 px-4 py-6 pb-16">
 
         {/* ── GÜNLÜK KALORİ HEDEFİ ── */}
@@ -163,6 +166,33 @@ export default function HedefDuzenle({ onClose, backLabel = 'Ayarlar' }) {
                 {p.toLocaleString('tr-TR')}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* ── GÜNLÜK SU HEDEFİ ── */}
+        <div className="rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card p-5 shadow-sm">
+          <p className="mb-4 text-[10px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+            GÜNLÜK SU HEDEFİ
+          </p>
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setWaterGoal(w => Math.max(1, w - 1))}
+              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-slate-100 dark:bg-night-muted text-xl font-bold text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-200 dark:hover:bg-night-border active:scale-90"
+            >−</button>
+            <div className="text-center">
+              <p className="text-5xl font-extrabold leading-none text-slate-900 dark:text-slate-100">
+                {waterGoal}
+              </p>
+              <p className="mt-1.5 text-xs font-medium text-slate-400 dark:text-slate-500">
+                bardak · {waterGoal * 250} ml
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWaterGoal(w => Math.min(16, w + 1))}
+              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-blue-500 text-xl font-bold text-white transition-colors hover:bg-blue-600 active:scale-90"
+            >+</button>
           </div>
         </div>
 
@@ -283,6 +313,7 @@ export default function HedefDuzenle({ onClose, backLabel = 'Ayarlar' }) {
           Hedefi Güncelle
         </button>
 
+      </div>
       </div>
     </div>
   )

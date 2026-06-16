@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { DietProvider, useDiet } from './context/DietContext'
-import { CalorieIcon, ProteinIcon, CarbsIcon, FatIcon } from './components/Meal/MealIcons'
+import { CalorieIcon, ProteinIcon, CarbsIcon, FatIcon, FiberIcon, SugarIcon } from './components/Meal/MealIcons'
 import OnboardingWizard from './components/OnboardingWizard'
 import History from './components/History'
 import Profile from './components/Profile'
@@ -446,6 +446,12 @@ function DashboardView({ onAddMeal }) {
             <MacroBar label="Protein"      icon={<ProteinIcon className="h-3.5 w-3.5" />} consumed={consumed.protein} target={macroTgt.protein} barColor="bg-indigo-500" labelColor="text-indigo-600 dark:text-indigo-400" />
             <MacroBar label="Karbonhidrat" icon={<CarbsIcon className="h-3.5 w-3.5" />}  consumed={consumed.carbs}   target={macroTgt.carbs}   barColor="bg-amber-500"  labelColor="text-amber-600 dark:text-amber-400"  />
             <MacroBar label="Yağ"          icon={<FatIcon className="h-3.5 w-3.5" />}    consumed={consumed.fat}     target={macroTgt.fat}     barColor="bg-rose-500"   labelColor="text-rose-500 dark:text-rose-400"    />
+            {macroTgt.fiber > 0 && (
+              <MacroBar label="Lif" icon={<FiberIcon className="h-3.5 w-3.5" />} consumed={consumed.fiber ?? 0} target={macroTgt.fiber} barColor="bg-teal-500" labelColor="text-teal-600 dark:text-teal-400" />
+            )}
+            {macroTgt.sugar > 0 && (
+              <MacroBar label="Şeker" icon={<SugarIcon className="h-3.5 w-3.5" />} consumed={consumed.sugar ?? 0} target={macroTgt.sugar} barColor="bg-pink-500" labelColor="text-pink-600 dark:text-pink-400" />
+            )}
           </div>
         )}
 
