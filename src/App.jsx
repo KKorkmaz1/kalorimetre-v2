@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { DietProvider, useDiet } from './context/DietContext'
+import { CalorieIcon, ProteinIcon, CarbsIcon, FatIcon } from './components/Meal/MealIcons'
 import OnboardingWizard from './components/OnboardingWizard'
 import History from './components/History'
 import Profile from './components/Profile'
@@ -123,24 +124,6 @@ function MacroBar({ label, icon, consumed, target, barColor, labelColor }) {
   )
 }
 
-// ─── Macro icons (SVG, no emoji) ──────────────────────────────────────────────
-
-const ProteinIcon = (
-  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-  </svg>
-)
-const CarbIcon = (
-  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
-  </svg>
-)
-const FatIcon = (
-  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-  </svg>
-)
 
 // ─── Water tracker ────────────────────────────────────────────────────────────
 
@@ -334,7 +317,7 @@ function LogItem({ log, onDelete }) {
   const hasExtras = log.protein > 0 || log.carbs > 0 || log.fat > 0
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 py-3 shadow-sm transition-all hover:shadow-md">
+    <div className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 py-3 shadow-sm transition-all hover:scale-[1.01] hover:shadow-md active:scale-[0.99]">
       <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${meta.bg}`}>
         <span className={`rounded-md px-1 py-0.5 text-[9px] font-extrabold ${meta.badge}`}>
           {log.mealType.slice(0, 2).toUpperCase()}
@@ -351,8 +334,9 @@ function LogItem({ log, onDelete }) {
         )}
       </div>
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
-        <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
-          <span className="text-emerald-600 dark:text-emerald-400">⚡</span> {log.kcal}
+        <span className="flex items-center gap-1 text-sm font-extrabold text-slate-800 dark:text-slate-100">
+          <CalorieIcon className="h-3 w-3 text-emerald-500" />
+          {log.kcal}
         </span>
         <button
           type="button" onClick={() => onDelete(log.id)}
@@ -369,12 +353,12 @@ function LogItem({ log, onDelete }) {
 // ─── Dashboard view ───────────────────────────────────────────────────────────
 
 function DashboardView({ onAddMeal }) {
-  const { profile, consumed, logs, water, deleteLog, setWater } = useDiet()
+  const { profile, consumed, logs, water, macros, deleteLog, setWater } = useDiet()
 
   const baseTDEE  = profile?.tdee || 0
   const rawTarget = baseTDEE > 0 ? baseTDEE + (profile.goalOffset ?? 0) : 0
   const target    = rawTarget > 0 ? Math.max(1200, rawTarget) : (Number(profile?.dailyGoal) || 0)
-  const macroTgt  = profile?.macros ?? { protein: 0, carbs: 0, fat: 0 }
+  const macroTgt  = macros ?? { protein: 0, carbs: 0, fat: 0 }
   const waterGoal = profile?.waterGoal ?? 8
   const remaining = Math.max(0, target - consumed.kcal)
 
@@ -420,8 +404,9 @@ function DashboardView({ onAddMeal }) {
         <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{aiMessage}</p>
         {target > 0 && (
           <div className="mt-2.5 flex gap-4">
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              ⚡ {remaining.toLocaleString('tr-TR')} kcal kalan
+            <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <CalorieIcon className="h-3 w-3" />
+              {remaining.toLocaleString('tr-TR')} kcal kalan
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">
               Öğün: {logs.length} kayıt
@@ -458,9 +443,9 @@ function DashboardView({ onAddMeal }) {
 
         {macroTgt.protein > 0 && (
           <div className="mt-4 space-y-3">
-            <MacroBar label="Protein"      icon={ProteinIcon} consumed={consumed.protein} target={macroTgt.protein} barColor="bg-indigo-500" labelColor="text-indigo-600 dark:text-indigo-400" />
-            <MacroBar label="Karbonhidrat" icon={CarbIcon}    consumed={consumed.carbs}   target={macroTgt.carbs}   barColor="bg-amber-500"  labelColor="text-amber-600 dark:text-amber-400"  />
-            <MacroBar label="Yağ"          icon={FatIcon}     consumed={consumed.fat}     target={macroTgt.fat}     barColor="bg-rose-500"   labelColor="text-rose-500 dark:text-rose-400"    />
+            <MacroBar label="Protein"      icon={<ProteinIcon className="h-3.5 w-3.5" />} consumed={consumed.protein} target={macroTgt.protein} barColor="bg-indigo-500" labelColor="text-indigo-600 dark:text-indigo-400" />
+            <MacroBar label="Karbonhidrat" icon={<CarbsIcon className="h-3.5 w-3.5" />}  consumed={consumed.carbs}   target={macroTgt.carbs}   barColor="bg-amber-500"  labelColor="text-amber-600 dark:text-amber-400"  />
+            <MacroBar label="Yağ"          icon={<FatIcon className="h-3.5 w-3.5" />}    consumed={consumed.fat}     target={macroTgt.fat}     barColor="bg-rose-500"   labelColor="text-rose-500 dark:text-rose-400"    />
           </div>
         )}
 
@@ -509,8 +494,9 @@ function DashboardView({ onAddMeal }) {
             ))}
             <div className="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-night-muted px-4 py-3">
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Günlük Toplam</span>
-              <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
-                <span className="text-emerald-500">⚡</span> {consumed.kcal.toLocaleString('tr-TR')} kcal
+              <span className="flex items-center gap-1 text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                <CalorieIcon className="h-3.5 w-3.5 text-emerald-500" />
+                {consumed.kcal.toLocaleString('tr-TR')} kcal
               </span>
             </div>
           </div>

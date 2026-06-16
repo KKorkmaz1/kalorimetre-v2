@@ -3,6 +3,7 @@
  *
  * Provides:
  *   profile        — user profile object
+ *   macros         — { protein, carbs, fat, fiber, sugar } derived from goal + dailyGoal
  *   consumed       — { kcal, protein, carbs, fat } for today
  *   logs           — today's food log entries
  *   water          — glasses of water today
@@ -17,6 +18,7 @@
 
 import { createContext, useContext, useState, useEffect, useMemo } from 'react'
 import { getUserProfile, saveUserProfile } from '../utils/storage'
+import { calcMacros, goalOffsetToId } from '../utils/macroEngine'
 
 const DietContext = createContext(null)
 
@@ -78,6 +80,25 @@ export function DietProvider({ children }) {
       fat:     logs.reduce((s, l) => s + (Number(l.fat)     || 0), 0),
     }
   }, [day.logs])
+
+  // ── Goal-based macros (with fiber + sugar) ────────────────────────────────
+  const macros = useMemo(() => {
+    const dailyGoal = Number(profile?.dailyGoal) || 0
+    if (!dailyGoal) return null
+    // If user has custom macro percentages from HedefDuzenle, apply them to current dailyGoal
+    if (profile?.macroPercent) {
+      const { protein: pp = 25, carbs: cp = 50, fat: fp = 25 } = profile.macroPercent
+      return {
+        protein: Math.round(dailyGoal * (pp / 100) / 4),
+        carbs:   Math.round(dailyGoal * (cp / 100) / 4),
+        fat:     Math.round(dailyGoal * (fp / 100) / 9),
+        fiber:   Math.round((dailyGoal / 1000) * 14),
+        sugar:   Math.round((dailyGoal * 0.10) / 4),
+      }
+    }
+    const goalId = profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset)
+    return calcMacros(dailyGoal, goalId)
+  }, [profile])
 
   // ── Profile ───────────────────────────────────────────────────────────────
   function updateProfile(newProfile) {
@@ -152,7 +173,7 @@ export function DietProvider({ children }) {
   }
 
   const value = {
-    profile, consumed, logs: day.logs, water: day.water, recipes,
+    profile, macros, consumed, logs: day.logs, water: day.water, recipes,
     updateProfile, addLog, deleteLog, setWater, saveRecipe, deleteRecipe,
   }
 

@@ -3,7 +3,6 @@ import { useDiet } from '../context/DietContext'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import HedefDuzenle from './HedefDuzenle'
 import OnboardingSonucu from './OnboardingSonucu'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,8 +103,7 @@ function WeightTooltip({ active, payload, label }) {
 export default function Profile() {
   const { profile } = useDiet()
 
-  const [showHedefDuzenle,   setShowHedefDuzenle]   = useState(false)
-  const [showOnboardingSon,  setShowOnboardingSon]   = useState(false)
+  const [showOnboardingSon, setShowOnboardingSon] = useState(false)
 
   // Derived values
   const dailyGoal = Number(profile?.dailyGoal) || 0
@@ -355,7 +353,6 @@ export default function Profile() {
               {
                 value: stats.streak || 0,
                 label: 'Günlük Seri',
-                suffix: '🔥',
                 bg: 'bg-orange-50 dark:bg-orange-900/20',
                 valueColor: 'text-orange-600 dark:text-orange-400',
                 icon: (
@@ -410,54 +407,31 @@ export default function Profile() {
         {/* ── HIZLI ERİŞİM ── */}
         <div>
           <p className="mb-3 text-[10px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500">HIZLI ERİŞİM</p>
-          <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card shadow-sm divide-y divide-slate-100 dark:divide-night-border">
-            {[
-              {
-                title: 'Hedefi Düzenle',
-                subtitle: 'Kalori & makro oranlarını özelleştir',
-                onClick: () => setShowHedefDuzenle(true),
-                icon: (
-                  <svg className="h-5 w-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5M3 12h9.75m-9.75 0a1.5 1.5 0 003 0m-3 0a1.5 1.5 0 013 0m0 0H21m-9.75 6h5.25M3.75 18H7.5m10.5 0a1.5 1.5 0 10-3 0m3 0a1.5 1.5 0 11-3 0" />
-                  </svg>
-                ),
-              },
-              {
-                title: 'Onboarding Sonucu',
-                subtitle: 'Hesaplama detaylarını görüntüle',
-                onClick: () => setShowOnboardingSon(true),
-                icon: (
-                  <svg className="h-5 w-5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-                  </svg>
-                ),
-              },
-            ].map(({ title, subtitle, onClick, icon }) => (
-              <button
-                key={title}
-                type="button"
-                onClick={onClick}
-                className="flex w-full cursor-pointer items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-night-muted active:bg-slate-100 dark:active:bg-night-border"
-              >
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-night-muted">
-                  {icon}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{title}</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
-                </div>
-                <svg className="h-4 w-4 flex-shrink-0 text-slate-300 dark:text-night-muted" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+          <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card shadow-sm">
+            <button
+              type="button"
+              onClick={() => setShowOnboardingSon(true)}
+              className="flex w-full cursor-pointer items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-night-muted active:bg-slate-100 dark:active:bg-night-border"
+            >
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-night-muted">
+                <svg className="h-5 w-5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
                 </svg>
-              </button>
-            ))}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Onboarding Sonucu</p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Hesaplama detaylarını görüntüle</p>
+              </div>
+              <svg className="h-4 w-4 flex-shrink-0 text-slate-300 dark:text-night-muted" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+              </svg>
+            </button>
           </div>
         </div>
 
       </div>
 
       {/* ── MODALS ── */}
-      {showHedefDuzenle  && <HedefDuzenle  onClose={() => setShowHedefDuzenle(false)} />}
       {showOnboardingSon && <OnboardingSonucu onClose={() => setShowOnboardingSon(false)} />}
     </>
   )

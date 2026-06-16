@@ -11,8 +11,8 @@ function ChevronLeft() {
 
 const PRESETS = [1500, 1800, 2000, 2150, 2500]
 
-export default function HedefDuzenle({ onClose }) {
-  const { profile, updateProfile } = useDiet()
+export default function HedefDuzenle({ onClose, backLabel = 'Ayarlar' }) {
+  const { profile, updateProfile, macros: contextMacros } = useDiet()
 
   // Derive system-calculated TDEE goal
   const systemKcal = useMemo(() => {
@@ -21,15 +21,18 @@ export default function HedefDuzenle({ onClose }) {
     return Number(profile?.dailyGoal) || 2000
   }, [profile])
 
-  // Derive current macro percents from saved macros
+  // Derive current macro percents — priority: saved macroPercent > context macros > fallback
   function inferPcts() {
+    if (profile?.macroPercent) {
+      const pp = Number(profile.macroPercent.protein) || 0
+      const cc = Number(profile.macroPercent.carbs)   || 0
+      if (pp > 0 && cc > 0) return { p: pp, c: cc }
+    }
     const dg = Number(profile?.dailyGoal) || systemKcal
-    const m  = profile?.macros
-    if (m && dg > 0) {
-      const p = Math.round((m.protein * 4 / dg) * 100)
-      const c = Math.round((m.carbs   * 4 / dg) * 100)
-      const f = Math.round((m.fat     * 9 / dg) * 100)
-      if (p + c + f <= 105) return { p, c }
+    if (contextMacros && dg > 0) {
+      const pp = Math.round((contextMacros.protein * 4 / dg) * 100)
+      const cc = Math.round((contextMacros.carbs   * 4 / dg) * 100)
+      if (pp > 0 && cc > 0 && pp + cc <= 95) return { p: pp, c: cc }
     }
     return { p: 25, c: 50 }
   }
@@ -84,7 +87,7 @@ export default function HedefDuzenle({ onClose }) {
           className="mb-2 flex cursor-pointer items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
         >
           <ChevronLeft />
-          Profil &amp; Analiz
+          {backLabel}
         </button>
         <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">KALORIMETRE</p>
         <h1 className="mt-0.5 text-2xl font-extrabold text-slate-900 dark:text-slate-100">Hedefi Düzenle</h1>

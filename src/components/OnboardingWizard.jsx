@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { saveUserProfile } from '../utils/storage'
+import { calcMacros, GOAL_DELTAS } from '../utils/macroEngine'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,13 @@ const ACTIVITY_LEVELS = [
 const ACTIVITY_MULTIPLIERS = {
   sedanter: 1.2, az_aktif: 1.375, orta_aktif: 1.55, cok_aktif: 1.725, ekstra: 1.9,
 }
+
+const PRIMARY_GOALS = [
+  { id: 'kilo_ver',   label: 'Kilo Vermek',              desc: 'Yağ yakımı için kalori açığı', delta: -500 },
+  { id: 'kilo_al',    label: 'Kilo Almak',               desc: 'Kilo kazanımı için kalori fazlası', delta: +500 },
+  { id: 'kas_kazan',  label: 'Kas Kazanmak',             desc: 'Lean bulk — hafif kalori fazlası', delta: +250 },
+  { id: 'dengeli',    label: 'Sağlıklı / Dengeli Beslenmek', desc: 'İdeal kiloyu koruma, denge', delta: 0 },
+]
 
 const DIET_PHILOSOPHIES = [
   {
@@ -86,6 +94,7 @@ const MOCK_MEALS = [
 
 const STEP_META = [
   { title: 'Temel Bilgiler',      subtitle: 'Kişisel istatistiklerinizi girin' },
+  { title: 'Ana Hedef',           subtitle: 'Beslenme hedefinizi belirleyin' },
   { title: 'Diyet Felsefesi',     subtitle: 'Beslenme tarzınızı seçin' },
   { title: 'Alerji & Dışlamalar', subtitle: 'Kaçınmanız gereken besinler' },
   { title: 'Tıbbi Geçmiş',        subtitle: 'Sağlık durumunuzu belirtin' },
@@ -256,7 +265,50 @@ function Step1BasicStats({ stats, onChange }) {
   )
 }
 
-// ─── Step 2 — Diet Philosophy ─────────────────────────────────────────────────
+// ─── Step 2 — Primary Goal ────────────────────────────────────────────────────
+
+function Step2PrimaryGoal({ selected, onSelect }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+        Hedefinize göre günlük kalori hedefi otomatik ayarlanacaktır.
+      </p>
+      {PRIMARY_GOALS.map(({ id, label, desc, delta }) => {
+        const active = selected === id
+        const sign   = delta > 0 ? '+' : delta < 0 ? '−' : '='
+        const badge  = delta === 0 ? 'İdame' : `${sign}${Math.abs(delta)} kcal`
+        return (
+          <button
+            key={id} type="button"
+            onClick={() => onSelect(id)}
+            className={`flex w-full items-center gap-4 rounded-2xl border-2 px-4 py-4 text-left transition-all ${
+              active
+                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 shadow-sm'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600'
+            }`}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className={`text-sm font-bold ${active ? 'text-emerald-800 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>{label}</p>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  active ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                }`}>{badge}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{desc}</p>
+            </div>
+            <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+              active ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600'
+            }`}>
+              {active && <CheckIcon className="h-3 w-3 text-white" />}
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Step 3 — Diet Philosophy ─────────────────────────────────────────────────
 
 function Step2DietPhilosophy({ selected, onSelect }) {
   return (
@@ -605,34 +657,50 @@ function Step6OCRUpload({ ocrState, onSimulate }) {
 
 // ─── TDEE Summary Card (shown only at final step) ─────────────────────────────
 
-function TDEESummaryCard({ tdee, stats }) {
+function TDEESummaryCard({ tdee, stats, primaryGoal }) {
   if (!tdee) return null
-  const protein = Math.round((tdee * 0.30) / 4)
-  const carbs   = Math.round((tdee * 0.40) / 4)
-  const fat     = Math.round((tdee * 0.30) / 9)
+  const goalObj  = PRIMARY_GOALS.find(g => g.id === primaryGoal)
+  const delta    = GOAL_DELTAS[primaryGoal] ?? 0
+  const adjusted = Math.max(1200, tdee + delta)
+  const macros   = calcMacros(adjusted, primaryGoal) ?? {}
 
   return (
     <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-xl shadow-emerald-200/40 dark:shadow-emerald-900/40">
       <div className="px-5 pt-5 pb-4">
         <p className="text-xs font-semibold text-emerald-100">Hesaplanan Günlük Kalori Hedefiniz</p>
         <div className="mt-1 flex items-end gap-1">
-          <span className="text-4xl font-extrabold text-white">{tdee.toLocaleString('tr-TR')}</span>
+          <span className="text-4xl font-extrabold text-white">{adjusted.toLocaleString('tr-TR')}</span>
           <span className="mb-1 text-sm font-medium text-emerald-200">kcal/gün</span>
         </div>
-        <p className="mt-1 text-xs text-emerald-300">Mifflin-St Jeor · {stats.gender === 'erkek' ? 'Erkek' : 'Kadın'} · {stats.age} yaş · {stats.weight} kg · {stats.height} cm</p>
+        {goalObj && delta !== 0 && (
+          <p className="text-xs text-emerald-200">Baz TDEE {tdee.toLocaleString('tr-TR')} · hedef: {goalObj.label}</p>
+        )}
+        <p className="mt-0.5 text-xs text-emerald-300">Mifflin-St Jeor · {stats.gender === 'erkek' ? 'Erkek' : 'Kadın'} · {stats.age} yaş · {stats.weight} kg · {stats.height} cm</p>
       </div>
       <div className="grid grid-cols-3 divide-x divide-emerald-400/40 border-t border-emerald-400/40 bg-emerald-600/30">
         {[
-          { label: 'Protein', value: protein, unit: 'g' },
-          { label: 'Karbonhidrat', value: carbs, unit: 'g' },
-          { label: 'Yağ', value: fat, unit: 'g' },
-        ].map(({ label, value, unit }) => (
+          { label: 'Protein',      value: macros.protein },
+          { label: 'Karbonhidrat', value: macros.carbs   },
+          { label: 'Yağ',          value: macros.fat     },
+        ].map(({ label, value }) => (
           <div key={label} className="flex flex-col items-center py-3">
-            <span className="text-lg font-bold text-white">{value}<span className="text-xs font-normal text-emerald-200">{unit}</span></span>
+            <span className="text-lg font-bold text-white">{value}<span className="text-xs font-normal text-emerald-200">g</span></span>
             <span className="text-xs text-emerald-300">{label}</span>
           </div>
         ))}
       </div>
+      {macros.fiber > 0 && (
+        <div className="grid grid-cols-2 divide-x divide-emerald-400/30 border-t border-emerald-400/30 bg-emerald-700/20">
+          <div className="flex flex-col items-center py-2.5">
+            <span className="text-sm font-bold text-white">{macros.fiber}<span className="text-[10px] font-normal text-emerald-200">g</span></span>
+            <span className="text-[10px] text-emerald-300">Lif (min.)</span>
+          </div>
+          <div className="flex flex-col items-center py-2.5">
+            <span className="text-sm font-bold text-white">{macros.sugar}<span className="text-[10px] font-normal text-emerald-200">g</span></span>
+            <span className="text-[10px] text-emerald-300">Şeker (maks.)</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -642,13 +710,14 @@ function TDEESummaryCard({ tdee, stats }) {
 export default function OnboardingWizard({ onComplete }) {
   const [step, setStep]               = useState(1)
   const [stats, setStats]             = useState({ gender: '', age: '', height: '', weight: '', activity: '' })
+  const [primaryGoal, setPrimaryGoal] = useState('')
   const [dietPhilosophy, setDietPhilosophy] = useState('')
   const [allergies, setAllergies]     = useState([])
   const [medicalHistory, setMedical]  = useState([])
   const [mode, setMode]               = useState('')
   const [ocrState, setOcrState]       = useState('idle') // 'idle' | 'scanning' | 'success'
 
-  const totalSteps = mode === 'manual' ? 5 : 6
+  const totalSteps = mode === 'manual' ? 6 : 7
   const tdee = calcTDEE(stats)
   const meta = STEP_META[step - 1]
 
@@ -678,18 +747,19 @@ export default function OnboardingWizard({ onComplete }) {
   // ── Validation ────────────────────────────────────────────────────────────
   function canProceed() {
     if (step === 1) return !!(stats.gender && stats.age && stats.height && stats.weight && stats.activity)
-    if (step === 2) return !!dietPhilosophy
-    if (step === 3) return allergies.length > 0
-    if (step === 4) return medicalHistory.length > 0
-    if (step === 5) return !!mode
-    if (step === 6) return ocrState === 'success'
+    if (step === 2) return !!primaryGoal
+    if (step === 3) return !!dietPhilosophy
+    if (step === 4) return allergies.length > 0
+    if (step === 5) return medicalHistory.length > 0
+    if (step === 6) return !!mode
+    if (step === 7) return ocrState === 'success'
     return true
   }
 
   // ── Navigation ────────────────────────────────────────────────────────────
   function handleNext() {
-    if (step === 5 && mode === 'manual') { finish(); return }
-    if (step === totalSteps)            { finish(); return }
+    if (step === 6 && mode === 'manual') { finish(); return }
+    if (step === totalSteps)             { finish(); return }
     setStep(s => s + 1)
   }
 
@@ -705,122 +775,208 @@ export default function OnboardingWizard({ onComplete }) {
 
   // ── Complete & save ───────────────────────────────────────────────────────
   function finish() {
+    const delta        = GOAL_DELTAS[primaryGoal] ?? 0
+    const adjustedTdee = tdee ? Math.max(1200, tdee + delta) : null
     const profile = {
       stats,
+      primaryGoal,
+      goalOffset: delta,
+      dailyGoal:  adjustedTdee ?? null,
       dietPhilosophy,
       allergies,
       medicalHistory,
       healthConditions: deriveHealthConditions(allergies, medicalHistory),
       mode,
-      tdee: tdee ?? null,
-      macros: tdee
-        ? {
-            protein: Math.round((tdee * 0.30) / 4),
-            carbs:   Math.round((tdee * 0.40) / 4),
-            fat:     Math.round((tdee * 0.30) / 9),
-          }
-        : null,
+      tdee: adjustedTdee ?? null,
+      macros: adjustedTdee ? calcMacros(adjustedTdee, primaryGoal) : null,
       dietPlan: ocrState === 'success' ? MOCK_MEALS : null,
     }
     saveUserProfile(profile)
     onComplete(profile)
   }
 
-  const isLastStep   = (step === 5 && mode === 'manual') || step === totalSteps
+  const isLastStep   = (step === 6 && mode === 'manual') || step === totalSteps
   const isScanning   = ocrState === 'scanning'
   const showTDEECard = isLastStep && !!tdee
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-app flex-col bg-white dark:bg-[#0C0F1A]">
+    <div className="flex min-h-svh flex-col bg-white dark:bg-[#0C0F1A] lg:items-center lg:justify-center lg:bg-slate-100 lg:dark:bg-[#080b14]">
 
-      {/* Gradient accent bar */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400" />
+      {/* ── Card wrapper ────────────────────────────────────────────────────── */}
+      <div className="flex min-h-svh w-full flex-col bg-white dark:bg-[#0C0F1A]
+                      lg:min-h-0 lg:h-[88vh] lg:max-w-4xl lg:flex-row
+                      lg:rounded-3xl lg:shadow-2xl lg:shadow-black/10 lg:dark:shadow-black/50
+                      lg:overflow-hidden lg:ring-1 lg:ring-slate-200 lg:dark:ring-white/5">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="px-6 pb-5 pt-8">
-        {/* Logo */}
-        <div className="mb-7 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 shadow-md shadow-emerald-200">
-            <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-            </svg>
+        {/* ── LEFT SIDEBAR — desktop only ──────────────────────────────────── */}
+        <aside className="hidden lg:flex lg:w-72 lg:flex-shrink-0 lg:flex-col bg-gradient-to-b from-emerald-600 to-teal-700">
+
+          {/* Branding */}
+          <div className="p-8 pb-5">
+            <div className="mb-8 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 shadow-inner">
+                <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                  <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.818a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.845-.143z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-lg font-extrabold leading-none tracking-tight text-white">Kalorimetre</p>
+                <p className="mt-0.5 text-xs text-emerald-200">AI Beslenme Asistanı</p>
+              </div>
+            </div>
+            <h2 className="text-xl font-extrabold leading-snug text-white">Profilinizi oluşturalım</h2>
+            <p className="mt-2 text-sm leading-relaxed text-emerald-100/70">
+              Birkaç adımda size özel kalori ve makro hedefleri belirlenecek.
+            </p>
           </div>
-          <span className="text-sm font-bold tracking-tight text-slate-800 dark:text-white">Kalorimetre</span>
-        </div>
 
-        <ProgressBar current={step} total={totalSteps} />
+          {/* Step list */}
+          <nav className="flex-1 space-y-0.5 px-5 pb-4">
+            {STEP_META.slice(0, totalSteps).map((s, idx) => {
+              const num = idx + 1
+              const done   = num < step
+              const active = num === step
+              return (
+                <div
+                  key={idx}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+                    active ? 'bg-white/15' : ''
+                  }`}
+                >
+                  <div className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-extrabold transition-all ${
+                    done || active ? 'bg-white text-emerald-700' : 'bg-white/20 text-white/50'
+                  }`}>
+                    {done
+                      ? <CheckIcon className="h-3 w-3" />
+                      : num
+                    }
+                  </div>
+                  <span className={`text-sm transition-all ${
+                    active ? 'font-semibold text-white' : done ? 'font-medium text-white/80' : 'text-white/40'
+                  }`}>
+                    {s.title}
+                  </span>
+                </div>
+              )
+            })}
+          </nav>
 
-        <div className="mt-5">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">{meta.title}</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{meta.subtitle}</p>
-        </div>
-      </div>
+          {/* TDEE preview at final step */}
+          {showTDEECard && tdee && (() => {
+            const adj = Math.max(1200, tdee + (GOAL_DELTAS[primaryGoal] ?? 0))
+            return (
+              <div className="mx-5 mb-6 rounded-2xl bg-white/15 p-4 text-center ring-1 ring-white/20">
+                <p className="text-xs font-medium text-emerald-100">Günlük Kalori Hedefi</p>
+                <p className="mt-1 text-4xl font-extrabold text-white">{adj.toLocaleString('tr-TR')}</p>
+                <p className="text-xs text-emerald-200">kcal / gün</p>
+              </div>
+            )
+          })()}
+        </aside>
 
-      {/* ── Scrollable content ──────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-6 pb-4">
-        {step === 1 && <Step1BasicStats stats={stats} onChange={setStats} />}
-        {step === 2 && <Step2DietPhilosophy selected={dietPhilosophy} onSelect={setDietPhilosophy} />}
-        {step === 3 && <Step3Allergies allergies={allergies} onToggle={handleAllergyToggle} />}
-        {step === 4 && <Step4MedicalHistory conditions={medicalHistory} onToggle={handleMedicalToggle} />}
-        {step === 5 && <Step5PathSelection mode={mode} onSelect={setMode} />}
-        {step === 6 && <Step6OCRUpload ocrState={ocrState} onSimulate={startScan} />}
-      </div>
+        {/* ── RIGHT CONTENT PANEL ───────────────────────────────────────────── */}
+        <div className="flex flex-1 flex-col lg:overflow-hidden">
 
-      {/* ── TDEE summary card — shown ONLY at the final step ────────────────── */}
-      {showTDEECard && (
-        <div className="mx-6 mb-4">
-          <TDEESummaryCard tdee={tdee} stats={stats} />
-        </div>
-      )}
+          {/* Gradient accent bar — mobile only */}
+          <div className="h-1.5 w-full flex-shrink-0 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 lg:hidden" />
 
-      {/* ── Bottom navigation ────────────────────────────────────────────────── */}
-      <div className="px-6 pb-10 pt-2">
-        <div className="flex gap-3">
-          {step > 1 && !isScanning && (
-            <button
-              type="button"
-              onClick={handleBack}
-              className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 transition-all hover:border-slate-300 active:scale-95"
-            >
-              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
-              </svg>
-            </button>
+          {/* Header */}
+          <div className="flex-shrink-0 px-6 pb-5 pt-8 lg:pt-10">
+            {/* Mobile logo */}
+            <div className="mb-7 flex items-center gap-2.5 lg:hidden">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 shadow-md shadow-emerald-200">
+                <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                </svg>
+              </div>
+              <span className="text-sm font-bold tracking-tight text-slate-800 dark:text-white">Kalorimetre</span>
+            </div>
+
+            {/* Mobile progress bar */}
+            <div className="lg:hidden">
+              <ProgressBar current={step} total={totalSteps} />
+            </div>
+
+            {/* Desktop step label */}
+            <p className="hidden lg:block mb-1 text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+              Adım {step} / {totalSteps}
+            </p>
+
+            <div className="mt-5 lg:mt-2">
+              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">{meta.title}</h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{meta.subtitle}</p>
+            </div>
+          </div>
+
+          {/* Scrollable step content */}
+          <div className="flex-1 overflow-y-auto px-6 pb-4">
+            {step === 1 && <Step1BasicStats stats={stats} onChange={setStats} />}
+            {step === 2 && <Step2PrimaryGoal selected={primaryGoal} onSelect={setPrimaryGoal} />}
+            {step === 3 && <Step2DietPhilosophy selected={dietPhilosophy} onSelect={setDietPhilosophy} />}
+            {step === 4 && <Step3Allergies allergies={allergies} onToggle={handleAllergyToggle} />}
+            {step === 5 && <Step4MedicalHistory conditions={medicalHistory} onToggle={handleMedicalToggle} />}
+            {step === 6 && <Step5PathSelection mode={mode} onSelect={setMode} />}
+            {step === 7 && <Step6OCRUpload ocrState={ocrState} onSimulate={startScan} />}
+          </div>
+
+          {/* TDEE summary card — final step (right panel) */}
+          {showTDEECard && (
+            <div className="mx-6 mb-4 flex-shrink-0">
+              <TDEESummaryCard tdee={tdee} stats={stats} primaryGoal={primaryGoal} />
+            </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={!canProceed() || isScanning}
-            className={`flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all ${
-              canProceed() && !isScanning
-                ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-200/40 hover:bg-emerald-600 active:scale-95'
-                : 'cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
-            }`}
-          >
-            {isScanning ? (
-              <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                Analiz ediliyor...
-              </>
-            ) : isLastStep ? (
-              <>
-                Başlayalım
-                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </>
-            ) : (
-              <>
-                İleri
-                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                </svg>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+          {/* Bottom navigation */}
+          <div className="flex-shrink-0 px-6 pb-10 pt-2 lg:pb-8">
+            <div className="flex gap-3">
+              {step > 1 && !isScanning && (
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="flex h-14 w-14 flex-shrink-0 cursor-pointer items-center justify-center rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 transition-all hover:border-emerald-300 hover:text-emerald-600 active:scale-95"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={!canProceed() || isScanning}
+                className={`flex h-14 flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all ${
+                  canProceed() && !isScanning
+                    ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-200/40 hover:bg-emerald-600 hover:shadow-emerald-300/40 active:scale-[0.98]'
+                    : 'cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
+                }`}
+              >
+                {isScanning ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    Analiz ediliyor...
+                  </>
+                ) : isLastStep ? (
+                  <>
+                    Başlayalım
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </>
+                ) : (
+                  <>
+                    İleri
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                    </svg>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+        </div>{/* end right panel */}
+      </div>{/* end card */}
     </div>
   )
 }

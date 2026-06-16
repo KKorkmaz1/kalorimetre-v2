@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useDiet } from '../context/DietContext'
+import { ProteinIcon, CarbsIcon, FatIcon } from './Meal/MealIcons'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -261,13 +262,13 @@ function DayDetailModal({ year, month, day, mockData, onClose }) {
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Makro Dağılımı</p>
 
             {[
-              { label: '💪 Protein',      val: consumed.protein, target: macroTarget.protein, color: 'bg-indigo-500',  textColor: 'text-indigo-600 dark:text-indigo-400'  },
-              { label: '🌾 Karbonhidrat', val: consumed.carbs,   target: macroTarget.carbs,   color: 'bg-amber-500',  textColor: 'text-amber-600 dark:text-amber-400'   },
-              { label: '💧 Yağ',          val: consumed.fat,     target: macroTarget.fat,     color: 'bg-rose-500',   textColor: 'text-rose-500 dark:text-rose-400'    },
-            ].map(({ label, val, target, color, textColor }) => (
+              { icon: <ProteinIcon className="h-3 w-3 flex-shrink-0" />, label: 'Protein',      val: consumed.protein, target: macroTarget.protein, color: 'bg-indigo-500', textColor: 'text-indigo-600 dark:text-indigo-400' },
+              { icon: <CarbsIcon   className="h-3 w-3 flex-shrink-0" />, label: 'Karbonhidrat', val: consumed.carbs,   target: macroTarget.carbs,   color: 'bg-amber-500',  textColor: 'text-amber-600 dark:text-amber-400'  },
+              { icon: <FatIcon     className="h-3 w-3 flex-shrink-0" />, label: 'Yağ',          val: consumed.fat,     target: macroTarget.fat,     color: 'bg-rose-500',   textColor: 'text-rose-500 dark:text-rose-400'    },
+            ].map(({ icon, label, val, target, color, textColor }) => (
               <div key={label}>
                 <div className="mb-1 flex items-center justify-between">
-                  <span className={`text-xs font-semibold ${textColor}`}>{label}</span>
+                  <span className={`flex items-center gap-1.5 text-xs font-semibold ${textColor}`}>{icon} {label}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
                     <span className="font-bold text-slate-800 dark:text-slate-200">{Math.round(val)}g</span>
                     {' / '}{target}g
@@ -344,16 +345,24 @@ function DayDetailModal({ year, month, day, mockData, onClose }) {
 
 // ─── Calendar day cell ────────────────────────────────────────────────────────
 
-function DayCell({ day, data, isToday, onClick }) {
+function fmtKcal(k) {
+  if (k >= 1000) {
+    const v = (k / 1000).toFixed(1)
+    return (v.endsWith('.0') ? v.slice(0, -2) : v) + 'k'
+  }
+  return String(k)
+}
+
+function DayCell({ day, data, isToday, onClick, target = 2000 }) {
   // Empty padding cell
   if (!day) {
-    return <div className="bg-white dark:bg-night-card" style={{ minHeight: 64 }} />
+    return <div className="bg-white dark:bg-night-card" style={{ minHeight: 72 }} />
   }
 
   // Future date — no data
   if (!data) {
     return (
-      <div className="flex flex-col items-center bg-slate-50/60 dark:bg-night-bg/60 px-0.5 py-1.5" style={{ minHeight: 64 }}>
+      <div className="flex flex-col items-center bg-slate-50/60 dark:bg-night-bg/60 px-0.5 py-1.5" style={{ minHeight: 72 }}>
         <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600">{day}</span>
       </div>
     )
@@ -364,54 +373,70 @@ function DayCell({ day, data, isToday, onClick }) {
     return (
       <button
         type="button" onClick={onClick}
-        className="flex w-full cursor-pointer flex-col items-center bg-white dark:bg-night-card px-0.5 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-night-muted active:bg-slate-100 dark:active:bg-night-muted"
-        style={{ minHeight: 64 }}
+        className="flex w-full cursor-pointer flex-col items-center bg-white dark:bg-night-card px-0.5 py-1.5 transition-all hover:bg-emerald-50 dark:hover:bg-emerald-900/10 active:scale-95"
+        style={{ minHeight: 72 }}
       >
         <span className={`text-[10px] font-bold ${isToday ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
           {day}
         </span>
         <span className="mb-1 mt-auto text-[9px] text-slate-300 dark:text-slate-600">—</span>
+        <span className="text-[8px] text-slate-200 dark:text-slate-700">/{fmtKcal(target)}</span>
       </button>
     )
   }
 
   // Logged day — success or over-limit
   const isSuccess = data.status === 'success'
+  const pct = Math.min(100, Math.round((data.kcal / target) * 100))
 
   return (
     <button
       type="button" onClick={onClick}
-      className={`flex w-full cursor-pointer flex-col items-center px-0.5 py-1.5 transition-all hover:opacity-80 active:scale-95 ${
+      className={`flex w-full cursor-pointer flex-col items-center px-1 py-1.5 transition-all hover:brightness-95 active:scale-[0.96] ${
         isSuccess
           ? 'bg-emerald-50 dark:bg-emerald-900/20'
           : 'bg-red-50 dark:bg-red-900/20'
       }`}
-      style={{ minHeight: 64 }}
+      style={{ minHeight: 72 }}
     >
-      <span className={`text-[10px] font-bold leading-none ${isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
+      {/* Day number */}
+      <span className={`text-[10px] font-bold leading-none ${
+        isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
+      }`}>
         {day}
       </span>
 
-      <div className={`my-1 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full ${
+      {/* Status badge */}
+      <div className={`my-0.5 flex h-[16px] w-[16px] flex-shrink-0 items-center justify-center rounded-full ${
         isSuccess ? 'bg-emerald-500' : 'bg-red-500'
       }`}>
         {isSuccess
-          ? <CheckIcon className="h-2.5 w-2.5 text-white" />
-          : <XIcon     className="h-2.5 w-2.5 text-white" />
+          ? <CheckIcon className="h-2 w-2 text-white" />
+          : <XIcon     className="h-2 w-2 text-white" />
         }
       </div>
 
-      <div className="flex items-center gap-px">
-        <FlameIcon className="h-2 w-2 flex-shrink-0 text-amber-400" />
-        <span className="text-[9px] font-semibold leading-none text-slate-600 dark:text-slate-300">
-          {data.kcal >= 1000 ? (data.kcal / 1000).toFixed(1).replace('.0', '') + 'k' : data.kcal}
-        </span>
+      {/* Consumed kcal */}
+      <span className={`text-[9px] font-extrabold leading-none tabular-nums ${
+        isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+      }`}>
+        {fmtKcal(data.kcal)}
+      </span>
+
+      {/* Mini progress bar */}
+      <div className={`mt-0.5 w-full overflow-hidden rounded-full ${
+        isSuccess ? 'bg-emerald-200 dark:bg-emerald-900/50' : 'bg-red-200 dark:bg-red-900/50'
+      }`} style={{ height: 3 }}>
+        <div
+          className={`h-full rounded-full ${isSuccess ? 'bg-emerald-500' : 'bg-red-500'}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
 
-      <div className="mt-0.5 flex items-center gap-px">
-        <DropIcon className="h-2 w-2 flex-shrink-0 text-blue-400" />
-        <span className="text-[8px] leading-none text-slate-400 dark:text-slate-500">{data.water}/8</span>
-      </div>
+      {/* Target kcal */}
+      <span className="mt-0.5 text-[8px] leading-none text-slate-400 dark:text-slate-500 tabular-nums">
+        /{fmtKcal(target)}
+      </span>
     </button>
   )
 }
@@ -539,6 +564,7 @@ export default function History() {
               day={day}
               data={day ? dayDataMap[day] : null}
               isToday={isCurrentMonth && day === today.getDate()}
+              target={tdee}
               onClick={day ? () => setSelectedCell({ year, month, day, data: dayDataMap[day] }) : undefined}
             />
           ))}
