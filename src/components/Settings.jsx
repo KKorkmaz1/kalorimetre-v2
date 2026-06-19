@@ -3,6 +3,7 @@ import { useDiet } from '../context/DietContext'
 import { ProteinIcon, CarbsIcon, FatIcon } from './Meal/MealIcons'
 import { calcTDEE, calcMacros, GOAL_DELTAS, goalOffsetToId } from '../utils/macroEngine'
 import HedefDuzenle from './HedefDuzenle'
+import { supabase } from '../utils/supabaseClient'
 
 // ─── Constants (used by sub-views only) ───────────────────────────────────────
 
@@ -332,6 +333,44 @@ function GorunumAyarlariView({ onBack }) {
   )
 }
 
+// ─── Sign-out button ──────────────────────────────────────────────────────────
+
+function SignOutButton() {
+  const [loading, setLoading] = useState(false)
+
+  async function handleSignOut() {
+    setLoading(true)
+    await supabase.auth.signOut()
+    // onAuthStateChange in App.jsx will set session to null → Auth screen shown
+    setLoading(false)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleSignOut}
+      disabled={loading}
+      className="flex w-full cursor-pointer items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-red-50 dark:hover:bg-red-900/10 active:bg-red-100 dark:active:bg-red-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-50 dark:bg-red-900/20">
+        {loading ? (
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-300 border-t-red-500" />
+        ) : (
+          <svg className="h-5 w-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+          </svg>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-red-500 dark:text-red-400">
+          {loading ? 'Çıkış yapılıyor…' : 'Çıkış Yap'}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Hesabınızdan güvenli çıkış yapın</p>
+      </div>
+    </button>
+  )
+}
+
 // ─── Main Settings — pure navigation menu ────────────────────────────────────
 
 export default function Settings() {
@@ -442,6 +481,14 @@ export default function Settings() {
           </div>
         </div>
       ))}
+
+      {/* ── HESAP / ÇIKIŞ ── */}
+      <div>
+        <SectionLabel text="Hesap" />
+        <div className="overflow-hidden rounded-2xl border border-red-100 dark:border-red-900/30 bg-white dark:bg-night-card shadow-sm">
+          <SignOutButton />
+        </div>
+      </div>
 
     </div>
   )

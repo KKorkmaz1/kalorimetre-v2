@@ -1,8 +1,10 @@
-// calories/protein/carbs/fat = per 100 g
+// calories/protein/carbs/fat/fiber/sugar = per 100 g
 // units: { "Label": multiplier }  →  total = food.calories × multiplier × qty
 // tags: dietary/allergen flags used by health engine and alternatives filter
 
-export const FOOD_DB = [
+import { SEED_DB } from '../../utils/foodDatabase.js'
+
+const CORE_DB = [
   {
     id: 1, name: 'Izgara Köfte',
     calories: 200, protein: 18, carbs: 2, fat: 14,
@@ -119,11 +121,14 @@ export const FOOD_DB = [
   },
   {
     id: 20, name: 'Zeytinyağı',
-    calories: 884, protein: 0, carbs: 0, fat: 100,
+    calories: 884, protein: 0, carbs: 0, fat: 100, fiber: 0, sugar: 0,
     units: { Mililitre: 0.01, 'Yemek Kaşığı': 0.15 },
     tags: ['Vegan', 'Vejetaryen', 'Keto', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
   },
 ]
+
+// Merged database: core items + rich Turkish seed database
+export const FOOD_DB = [...CORE_DB, ...SEED_DB]
 
 export const MEAL_TYPES = ['Kahvaltı', 'Öğle', 'Akşam', 'Ara Öğün']
 

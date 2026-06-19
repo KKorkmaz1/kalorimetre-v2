@@ -7,6 +7,8 @@ import History from './components/History'
 import Profile from './components/Profile'
 import Settings from './components/Settings'
 import AddMealModal from './components/AddMealModal'
+import Auth from './components/Auth'
+import { supabase } from './utils/supabaseClient'
 
 // ─── SVG icon helpers ─────────────────────────────────────────────────────────
 
@@ -913,7 +915,7 @@ function MainApp() {
   )
 }
 
-// ─── App content ──────────────────────────────────────────────────────────────
+// ─── App content (requires authenticated session) ────────────────────────────
 
 function AppContent() {
   const { profile, updateProfile } = useDiet()
@@ -944,10 +946,50 @@ function AppContent() {
   return <MainApp />
 }
 
-export default function App() {
+// ─── Session gate — wraps the entire app ─────────────────────────────────────
+
+function SessionGate() {
+  const [session,     setSession]     = useState(undefined)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session ?? null)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // Still resolving — show full-screen spinner
+  if (session === undefined) {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-slate-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 shadow-xl shadow-emerald-500/30">
+            <svg className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="currentColor">
+              <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.818a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.845-.143z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-emerald-500" />
+        </div>
+      </div>
+    )
+  }
+
+  // No session — show auth screen
+  if (!session) return <Auth />
+
+  // Authenticated — render main app, scoped to this user's profile
   return (
-    <DietProvider>
+    <DietProvider userId={session.user.id}>
       <AppContent />
     </DietProvider>
   )
+}
+
+export default function App() {
+  return <SessionGate />
 }

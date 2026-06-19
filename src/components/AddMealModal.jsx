@@ -5,61 +5,25 @@ import { PlusIcon, CloseIcon } from './Meal/MealIcons'
 import SearchBar from './Meal/SearchBar'
 import BasketItem from './Meal/BasketItem'
 import MacroSummary from './Meal/MacroSummary'
+import BarcodeScanner from './BarcodeScanner'
+import { parseNLPMeal } from '../services/aiService'
+import { supabase } from '../utils/supabaseClient'
+import { lookupBarcode } from '../utils/openFoodFacts'
 
-// ─── OpenFoodFacts API helper ─────────────────────────────────────────────────
+// ─── Default serving units for barcode / unknown products ─────────────────────
+// AI-generated units are used for NLP results; this is a sensible static fallback.
 
-async function fetchOpenFoodFacts(barcode) {
-  const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
-  if (!res.ok) throw new Error('HTTP ' + res.status)
-  return res.json()
-}
-
-// ─── Serving unit pool ────────────────────────────────────────────────────────
-
-const ALL_UNITS = {
-  gram:    { id: 'gram',    label: 'Gram',     grams: null },
-  kase:    { id: 'kase',    label: 'Kase',     grams: 50   },
-  dilim:   { id: 'dilim',   label: 'Dilim',    grams: 30   },
-  piece:   { id: 'piece',   label: 'Adet/Bar', grams: 50   },
-  spoon:   { id: 'spoon',   label: 'Kaşık',    grams: 15   },
-  glass:   { id: 'glass',   label: 'Bardak',   grams: 200  },
-  portion: { id: 'portion', label: 'Porsiyon', grams: 150  },
-}
-
-/**
- * Derive context-aware serving units from a product name using keyword rules.
- * Always starts with Gram so the user can type any value.
- */
-function deriveSmartServingUnits(name) {
-  const n = (name || '').toLowerCase()
-  // Cereal / oat bowl items
-  if (/gevrek|flakes|müsli|yulaf|muesli/.test(n))
-    return [ALL_UNITS.gram, ALL_UNITS.kase]
-  // Bread / pizza / slice items
-  if (/ekmek|pizza|dilim/.test(n))
-    return [ALL_UNITS.gram, ALL_UNITS.dilim]
-  // Chocolate / bar / biscuit items
-  if (/çikolata|chocolate|tadelle|biskuvi|bisküvi|\bbar\b/.test(n))
-    return [ALL_UNITS.gram, ALL_UNITS.piece]
-  // Spreads — hazelnut creams, nut butters, Nutella-type (spoon only, no glass)
-  if (/sarelle|nutella|fıstık ezmesi|fındık|krema|hazelnut|noisettes|spread/.test(n))
-    return [ALL_UNITS.gram, ALL_UNITS.spoon]
-  // Dairy & liquids — yogurt, water, juice (spoon + glass)
-  if (/yoğurt|sıvı|\bsu\b/.test(n))
-    return [ALL_UNITS.gram, ALL_UNITS.spoon, ALL_UNITS.glass]
-  // Default
-  return [ALL_UNITS.gram, ALL_UNITS.portion]
-}
-
-// ─── Saved foods localStorage key ────────────────────────────────────────────
-
-const SAVED_FOODS_KEY = 'kalorimetre_saved_foods'
+const DEFAULT_BARCODE_UNITS = [
+  { id: 'gram',    label: 'Gram',     grams: null },
+  { id: 'porsiyon', label: 'Porsiyon', grams: 150  },
+  { id: 'adet',   label: 'Adet',     grams: 100  },
+]
 
 export default function AddMealModal({ isOpen, onClose, defaultMealType = null }) {
-  const { addLog, profile } = useDiet()
+  const { addLog, profile, userId } = useDiet()
 
   // ── All hooks before early return ─────────────────────────────────────────
-  const [tab,       setTab]       = useState('search') // 'search' | 'manual'
+  const [tab,       setTab]       = useState('search') // 'search' | 'ai' | 'manual' | 'saved'
   const [mealType,  setMealType]  = useState(defaultMealType || 'Öğle')
 
   // Sync meal type when opened from a specific slot
@@ -67,14 +31,31 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     if (isOpen && defaultMealType) setMealType(defaultMealType)
   }, [isOpen, defaultMealType])
 
-  // Load saved foods from localStorage each time modal opens
+  // Load saved foods from Supabase each time modal opens
   useEffect(() => {
-    if (!isOpen) return
-    try {
-      const raw = window.localStorage.getItem(SAVED_FOODS_KEY)
-      setSavedFoods(raw ? JSON.parse(raw) : [])
-    } catch { setSavedFoods([]) }
-  }, [isOpen])
+    if (!isOpen || !userId) return
+    supabase
+      .from('saved_foods')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (!data) return
+        setSavedFoods(data.map(row => ({
+          id:           row.id,
+          nickname:     row.nickname,
+          originalName: row.original_name,
+          kcal100:      Number(row.kcal),
+          protein100:   Number(row.protein),
+          carbs100:     Number(row.carbs),
+          fat100:       Number(row.fat),
+          fiber100:     Number(row.fiber),
+          sugar100:     Number(row.sugar),
+          defaultGrams: row.default_weight ?? 100,
+          savedAt:      row.created_at,
+        })))
+      })
+  }, [isOpen, userId])
   const [mealLabel, setMealLabel] = useState('')
   const [basket,    setBasket]    = useState([])
   const [error,     setError]     = useState('')
@@ -95,13 +76,15 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [mSug,  setMSug]  = useState('')
 
   // Barcode sub-state
-  const [barcodeOpen,    setBarcodeOpen]    = useState(false)
-  const [barcodeInput,   setBarcodeInput]   = useState('')
-  const [barcodeLoading, setBarcodeLoading] = useState(false)
-  const [barcodeError,   setBarcodeError]   = useState('')
-  const [barcodeProduct, setBarcodeProduct] = useState(null)
-  const [barcodeGrams,   setBarcodeGrams]   = useState('100')
-  const [barcodeUnit,    setBarcodeUnit]    = useState('gram')
+  const [scannerOpen,         setScannerOpen]         = useState(false)
+  const [barcodeOpen,         setBarcodeOpen]         = useState(false)
+  const [barcodeInput,        setBarcodeInput]        = useState('')
+  const [barcodeLoading,      setBarcodeLoading]      = useState(false)
+  const [barcodeError,        setBarcodeError]        = useState('')
+  const [barcodeProduct,      setBarcodeProduct]      = useState(null)
+  const [barcodeGrams,        setBarcodeGrams]        = useState('100')
+  const [barcodeUnit,         setBarcodeUnit]         = useState('gram')
+  const [barcodePackageGrams, setBarcodePackageGrams] = useState(null) // real package weight in g
 
   // Unknown-product (not-found) inline form
   const [barcodeUnknown,  setBarcodeUnknown]  = useState(false)
@@ -121,9 +104,23 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [showSaveForm,   setShowSaveForm]   = useState(false)
   const [savedFoodGrams, setSavedFoodGrams] = useState({}) // { [foodId]: gramsString }
 
+  // Inline edit state for saved foods
+  const [editingFoodId, setEditingFoodId] = useState(null)
+  const [editFields,    setEditFields]    = useState({})
+
+  // AI NLP sub-state
+  const [aiText,      setAiText]      = useState('')
+  const [aiLoading,   setAiLoading]   = useState(false)
+  const [aiResults,   setAiResults]   = useState([])   // parsed food items from AI
+  const [aiError,     setAiError]     = useState('')
+  const [aiGrams,     setAiGrams]     = useState({})   // { [idx]: gramsString }
+  const [aiSaveIdx,   setAiSaveIdx]   = useState(null) // index of item being saved
+  const [aiSaveName,  setAiSaveName]  = useState('')
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return q ? FOOD_DB.filter(f => f.name.toLowerCase().includes(q)) : FOOD_DB
+    if (!q) return FOOD_DB.slice(0, 30)
+    return FOOD_DB.filter(f => f.name.toLowerCase().includes(q))
   }, [query])
 
   const preview = useMemo(() => calcPreview(selFood, selUnit, qty), [selFood, selUnit, qty])
@@ -144,17 +141,39 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   if (!isOpen) return null
 
   // ── Barcode API ────────────────────────────────────────────────────────────
-  async function handleFetchBarcode() {
-    const code = barcodeInput.trim()
+  function applyBarcodeProduct(product) {
+    setBarcodeProduct({
+      name:       product.name,
+      kcal100:    product.kcal100,
+      protein100: product.protein100,
+      carbs100:   product.carbs100,
+      fat100:     product.fat100,
+      fiber100:   product.fiber100,
+      sugar100:   product.sugar100,
+    })
+    const pkgG = product.packageGrams
+    setBarcodePackageGrams(pkgG)
+    if (pkgG) {
+      setBarcodeUnit('paket')
+      setBarcodeGrams(String(pkgG))
+    } else {
+      setBarcodeUnit('gram')
+      setBarcodeGrams('100')
+    }
+  }
+
+  async function handleFetchBarcode(codeOverride) {
+    const code = (codeOverride ?? barcodeInput).trim()
     if (!code) { setBarcodeError('Barkod numarası giriniz.'); return }
+    setBarcodeInput(code)
     setBarcodeLoading(true)
     setBarcodeError('')
     setBarcodeProduct(null)
     setBarcodeUnknown(false)
+    setBarcodeOpen(true)
     try {
-      const data = await fetchOpenFoodFacts(code)
-      if (data.status !== 1 || !data.product) {
-        // Product not found → enter unknown-product manual mode
+      const result = await lookupBarcode(code)
+      if (!result.found) {
         setBarcodeUnknown(true)
         setUnknownName('')
         setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
@@ -163,32 +182,22 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         return
       }
       setBarcodeUnknown(false)
-      const p = data.product
-      const n = p.nutriments || {}
-      const kcal100 = Math.round(
-        n['energy-kcal_100g'] ??
-        (n['energy-kj_100g'] ? n['energy-kj_100g'] / 4.184 : 0)
-      )
-      const productName = (p.product_name_tr || p.product_name || '').trim()
-      setBarcodeProduct({
-        name: productName || 'Bilinmeyen Ürün',
-        kcal100,
-        protein100: Math.round((n['proteins_100g']       || 0) * 10) / 10,
-        carbs100:   Math.round((n['carbohydrates_100g']  || 0) * 10) / 10,
-        fat100:     Math.round((n['fat_100g']            || 0) * 10) / 10,
-        fiber100:   Math.round((n['fiber_100g']          || 0) * 10) / 10,
-        sugar100:   Math.round((n['sugars_100g']         || 0) * 10) / 10,
-      })
-      // Auto-select first smart unit that has a gram preset (not "Gram")
-      const smartUnits = deriveSmartServingUnits(productName)
-      const firstPreset = smartUnits.find(u => u.grams !== null)
-      if (firstPreset) { setBarcodeUnit(firstPreset.id); setBarcodeGrams(String(firstPreset.grams)) }
-      else             { setBarcodeUnit('gram');          setBarcodeGrams('100') }
+      applyBarcodeProduct(result.product)
     } catch {
       setBarcodeError('Bağlantı hatası. İnternet bağlantınızı kontrol edin.')
     } finally {
       setBarcodeLoading(false)
     }
+  }
+
+  function handleBarcodeScanned(code) {
+    setScannerOpen(false)
+    handleFetchBarcode(code)
+  }
+
+  function openBarcodeScanner() {
+    setScannerOpen(true)
+    setBarcodeError('')
   }
 
   // ── Unknown-product basket add ─────────────────────────────────────────────
@@ -239,15 +248,13 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setShowSaveForm(false); setSaveNickname('')
   }
 
-  // ── Saved foods ────────────────────────────────────────────────────────────
-  function persistSavedFoods(foods) {
-    try { window.localStorage.setItem(SAVED_FOODS_KEY, JSON.stringify(foods)) } catch {}
-  }
+  // ── Saved foods (Supabase) ────────────────────────────────────────────────
 
-  function handleSaveFavorite() {
-    if (!barcodeProduct || !saveNickname.trim()) return
+  async function handleSaveFavorite() {
+    if (!barcodeProduct || !saveNickname.trim() || !userId) return
+    const newId = crypto.randomUUID()
     const newFood = {
-      id:           crypto.randomUUID(),
+      id:           newId,
       nickname:     saveNickname.trim(),
       originalName: barcodeProduct.name,
       kcal100:      barcodeProduct.kcal100,
@@ -256,23 +263,97 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       fat100:       barcodeProduct.fat100,
       fiber100:     barcodeProduct.fiber100,
       sugar100:     barcodeProduct.sugar100,
+      defaultGrams: 100,
       savedAt:      new Date().toISOString(),
     }
-    setSavedFoods(prev => {
-      const next = [...prev, newFood]
-      persistSavedFoods(next)
-      return next
-    })
+    // Optimistic update
+    setSavedFoods(prev => [newFood, ...prev])
     setShowSaveForm(false)
     setSaveNickname('')
+    // Persist
+    await supabase.from('saved_foods').insert({
+      id:            newId,
+      user_id:       userId,
+      nickname:      newFood.nickname,
+      original_name: newFood.originalName,
+      kcal:          newFood.kcal100,
+      protein:       newFood.protein100,
+      carbs:         newFood.carbs100,
+      fat:           newFood.fat100,
+      fiber:         newFood.fiber100,
+      sugar:         newFood.sugar100,
+      default_weight: 100,
+    })
   }
 
-  function deleteSavedFood(id) {
-    setSavedFoods(prev => {
-      const next = prev.filter(f => f.id !== id)
-      persistSavedFoods(next)
-      return next
+  async function deleteSavedFood(id) {
+    // Optimistic update
+    setSavedFoods(prev => prev.filter(f => f.id !== id))
+    if (editingFoodId === id) { setEditingFoodId(null); setEditFields({}) }
+    if (userId) await supabase.from('saved_foods').delete().eq('id', id).eq('user_id', userId)
+  }
+
+  function quickAddSavedFood(food) {
+    const grams = Math.max(1, food.defaultGrams || 100)
+    const r = grams / 100
+    setBasket(prev => [...prev, {
+      id:       crypto.randomUUID(),
+      foodId:   null,
+      foodName: food.nickname,
+      unit:     `${grams}g`,
+      qty:      1,
+      kcal:     Math.round(food.kcal100     * r),
+      protein:  Math.round(food.protein100  * r * 10) / 10,
+      carbs:    Math.round(food.carbs100    * r * 10) / 10,
+      fat:      Math.round(food.fat100      * r * 10) / 10,
+      fiber:    Math.round((food.fiber100 || 0) * r * 10) / 10,
+      sugar:    Math.round((food.sugar100 || 0) * r * 10) / 10,
+    }])
+  }
+
+  function handleStartEdit(food) {
+    setEditingFoodId(food.id)
+    setEditFields({
+      nickname:    food.nickname,
+      defaultGrams: String(food.defaultGrams || 100),
+      kcal100:     String(food.kcal100),
+      protein100:  String(food.protein100),
+      carbs100:    String(food.carbs100),
+      fat100:      String(food.fat100),
+      fiber100:    String(food.fiber100 || 0),
+      sugar100:    String(food.sugar100 || 0),
     })
+  }
+
+  async function handleEditSave(foodId) {
+    if (!editFields.nickname?.trim()) return
+    const updates = {
+      nickname:     editFields.nickname.trim(),
+      defaultGrams: Math.max(1, Number(editFields.defaultGrams) || 100),
+      kcal100:      Math.max(0, Number(editFields.kcal100)     || 0),
+      protein100:   Math.max(0, Number(editFields.protein100)  || 0),
+      carbs100:     Math.max(0, Number(editFields.carbs100)    || 0),
+      fat100:       Math.max(0, Number(editFields.fat100)      || 0),
+      fiber100:     Math.max(0, Number(editFields.fiber100)    || 0),
+      sugar100:     Math.max(0, Number(editFields.sugar100)    || 0),
+    }
+    // Optimistic update
+    setSavedFoods(prev => prev.map(f => f.id !== foodId ? f : { ...f, ...updates }))
+    setEditingFoodId(null)
+    setEditFields({})
+    // Persist
+    if (userId) {
+      await supabase.from('saved_foods').update({
+        nickname:       updates.nickname,
+        kcal:           updates.kcal100,
+        protein:        updates.protein100,
+        carbs:          updates.carbs100,
+        fat:            updates.fat100,
+        fiber:          updates.fiber100,
+        sugar:          updates.sugar100,
+        default_weight: updates.defaultGrams,
+      }).eq('id', foodId).eq('user_id', userId)
+    }
   }
 
   function addSavedFoodToBasket(food) {
@@ -291,6 +372,91 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       fiber:    Math.round(food.fiber100    * r * 10) / 10,
       sugar:    Math.round(food.sugar100    * r * 10) / 10,
     }])
+  }
+
+  // ── AI NLP actions ─────────────────────────────────────────────────────────
+  async function handleAIParse() {
+    if (!aiText.trim()) { setAiError('Lütfen ne yediğinizi yazın.'); return }
+    setAiLoading(true)
+    setAiError('')
+    setAiResults([])
+    setAiGrams({})
+    try {
+      const items = await parseNLPMeal(aiText)
+      if (items.length === 0) {
+        setAiError('Hiçbir besin tanımlanamadı. Daha açık bir şekilde yazmayı deneyin.')
+      } else {
+        const initialGrams = {}
+        items.forEach((item, idx) => { initialGrams[idx] = String(item.defaultGrams) })
+        setAiGrams(initialGrams)
+        setAiResults(items)
+      }
+    } catch (err) {
+      setAiError(err.message || 'Bir hata oluştu. Lütfen tekrar deneyin.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function addAIItemToBasket(item, idx) {
+    const grams = Math.max(1, Number(aiGrams[idx]) || item.defaultGrams)
+    const r = grams / 100
+    setBasket(prev => [...prev, {
+      id:       crypto.randomUUID(),
+      foodId:   null,
+      foodName: item.name,
+      unit:     `${grams}g`,
+      qty:      1,
+      kcal:     Math.round(item.kcal100 * r),
+      protein:  Math.round(item.protein100 * r * 10) / 10,
+      carbs:    Math.round(item.carbs100  * r * 10) / 10,
+      fat:      Math.round(item.fat100    * r * 10) / 10,
+      fiber:    Math.round(item.fiber100  * r * 10) / 10,
+      sugar:    Math.round(item.sugar100  * r * 10) / 10,
+    }])
+    setError('')
+  }
+
+  function addAllAIItemsToBasket() {
+    aiResults.forEach((item, idx) => addAIItemToBasket(item, idx))
+  }
+
+  async function handleSaveAIItem(idx) {
+    const item = aiResults[idx]
+    const nickname = aiSaveName.trim() || item.name
+    if (!nickname || !userId) return
+    const newId = crypto.randomUUID()
+    const newFood = {
+      id:           newId,
+      nickname,
+      originalName: item.name,
+      kcal100:      item.kcal100,
+      protein100:   item.protein100,
+      carbs100:     item.carbs100,
+      fat100:       item.fat100,
+      fiber100:     item.fiber100,
+      sugar100:     item.sugar100,
+      defaultGrams: item.defaultGrams,
+      savedAt:      new Date().toISOString(),
+    }
+    // Optimistic update
+    setSavedFoods(prev => [newFood, ...prev])
+    setAiSaveIdx(null)
+    setAiSaveName('')
+    // Persist
+    await supabase.from('saved_foods').insert({
+      id:             newId,
+      user_id:        userId,
+      nickname:       newFood.nickname,
+      original_name:  newFood.originalName,
+      kcal:           newFood.kcal100,
+      protein:        newFood.protein100,
+      carbs:          newFood.carbs100,
+      fat:            newFood.fat100,
+      fiber:          newFood.fiber100,
+      sugar:          newFood.sugar100,
+      default_weight: newFood.defaultGrams,
+    })
   }
 
   // ── Basket actions ─────────────────────────────────────────────────────────
@@ -365,13 +531,16 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setQuery(''); setSelFood(null); setSelUnit(''); setQty('1')
     setMName(''); setMKcal(''); setMProt(''); setMCarb(''); setMFat('')
     setMFib(''); setMSug(''); setError('')
-    setBarcodeOpen(false); setBarcodeInput(''); setBarcodeLoading(false)
+    setScannerOpen(false); setBarcodeOpen(false); setBarcodeInput(''); setBarcodeLoading(false)
     setBarcodeError(''); setBarcodeProduct(null); setBarcodeGrams('100'); setBarcodeUnit('gram')
-    setBarcodeUnknown(false)
+    setBarcodePackageGrams(null); setBarcodeUnknown(false)
     setUnknownName(''); setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
     setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
     setUnknownUnit('gram'); setUnknownGrams('100')
     setShowSaveForm(false); setSaveNickname(''); setSavedFoodGrams({})
+    setEditingFoodId(null); setEditFields({})
+    setAiText(''); setAiLoading(false); setAiResults([]); setAiError('')
+    setAiGrams({}); setAiSaveIdx(null); setAiSaveName('')
   }
 
   return (
@@ -437,17 +606,18 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
           />
 
           {/* Sub-tab bar */}
-          <div className="flex rounded-2xl bg-slate-100 dark:bg-night-muted p-1">
+          <div className="flex rounded-2xl bg-slate-100 dark:bg-night-muted p-1 gap-0.5">
             {[
               { id: 'search', label: 'Gıda Ara' },
-              { id: 'manual', label: 'Manuel'   },
+              { id: 'ai',     label: '🤖 YZ ile' },
+              { id: 'manual', label: 'Manuel'    },
               { id: 'saved',  label: '⭐ Kayıtlı' },
             ].map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => { setTab(id); setError('') }}
-                className={`flex-1 cursor-pointer rounded-xl py-2 text-xs font-bold transition-all ${
+                className={`flex-1 cursor-pointer rounded-xl py-2 text-[11px] font-bold transition-all ${
                   tab === id
                     ? 'bg-white dark:bg-night-card text-slate-900 dark:text-slate-100 shadow-sm'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -465,19 +635,18 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
           {/* ═══ SEARCH TAB ═══ */}
           {tab === 'search' && (
             <>
-              {/* Barkod header row: toggle button + manual input */}
+              {/* Barkod header row: camera scan + manual input */}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => { setBarcodeOpen(o => !o); setBarcodeError(''); setBarcodeProduct(null); setShowSaveForm(false) }}
-                  className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed py-3 text-xs font-extrabold transition-all active:scale-[0.98] ${
-                    barcodeOpen
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
-                      : 'border-emerald-300 dark:border-emerald-700/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/10 text-emerald-700 dark:text-emerald-400 hover:border-emerald-400'
-                  }`}
+                  onClick={openBarcodeScanner}
+                  className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/10 py-3.5 text-xs font-extrabold text-emerald-700 dark:text-emerald-400 transition-all hover:border-emerald-400 active:scale-[0.98] shadow-sm shadow-emerald-500/10"
                 >
-                  <span className="text-base leading-none">📷</span>
-                  <span>Barkod Tara</span>
+                  <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  <span>Barkod Okut</span>
                 </button>
                 {/* Quick barcode text input always visible */}
                 <div className="flex flex-1 items-center gap-1.5 rounded-2xl border-2 border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2.5 focus-within:border-emerald-400 transition-all">
@@ -489,12 +658,12 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                     type="text" inputMode="numeric"
                     value={barcodeInput}
                     onChange={e => { setBarcodeInput(e.target.value); setBarcodeError('') }}
-                    onKeyDown={e => { if (e.key === 'Enter') { setBarcodeOpen(true); handleFetchBarcode() } }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleFetchBarcode() }}
                     placeholder="Barkod no…"
                     className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
                   />
                   {barcodeInput && (
-                    <button type="button" onClick={() => { setBarcodeOpen(true); handleFetchBarcode() }}
+                    <button type="button" onClick={() => handleFetchBarcode()}
                       disabled={barcodeLoading}
                       className="flex-shrink-0 cursor-pointer rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-extrabold text-white hover:bg-emerald-600 disabled:opacity-60">
                       {barcodeLoading ? '…' : 'Git'}
@@ -584,11 +753,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                         </div>
                       </div>
 
-                      {/* Smart serving units derived from typed name */}
+                      {/* Serving size input */}
                       <div>
                         <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Porsiyon Büyüklüğü</p>
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {deriveSmartServingUnits(unknownName).map(u => (
+                          {DEFAULT_BARCODE_UNITS.filter(u => u.grams !== null).map(u => (
                             <button key={u.id} type="button"
                               onClick={() => {
                                 setUnknownUnit(u.id)
@@ -653,11 +822,31 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                         ))}
                       </div>
 
-                      {/* Serving unit selector — smart units derived from product name */}
+                      {/* Serving unit selector */}
                       <div>
                         <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Porsiyon Büyüklüğü</p>
+                        {barcodePackageGrams && (
+                          <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5">
+                            <span className="text-sm">📦</span>
+                            <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                              Gerçek paket ağırlığı bulundu: <span className="font-extrabold">{barcodePackageGrams}g</span> — otomatik seçildi.
+                            </p>
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {deriveSmartServingUnits(barcodeProduct.name).map(u => (
+                          {/* Dynamic "Paket" chip shown only when real package weight was found */}
+                          {barcodePackageGrams && (
+                            <button type="button"
+                              onClick={() => { setBarcodeUnit('paket'); setBarcodeGrams(String(barcodePackageGrams)) }}
+                              className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
+                                barcodeUnit === 'paket'
+                                  ? 'bg-emerald-500 text-white shadow-sm ring-2 ring-emerald-300'
+                                  : 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100'
+                              }`}>
+                              📦 Paket ({barcodePackageGrams}g)
+                            </button>
+                          )}
+                          {DEFAULT_BARCODE_UNITS.filter(u => u.grams !== null).map(u => (
                             <button key={u.id} type="button"
                               onClick={() => {
                                 setBarcodeUnit(u.id)
@@ -738,6 +927,175 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
             </>
           )}
 
+          {/* ═══ AI NLP TAB ═══ */}
+          {tab === 'ai' && (
+            <div className="space-y-3">
+
+              {/* Prompt header */}
+              <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/10 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl leading-none">🤖</span>
+                  <div>
+                    <p className="text-sm font-extrabold text-emerald-800 dark:text-emerald-300">Yapay Zeka ile Ekle</p>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-500">Doğal dilde ne yediğinizi yazın, AI besinleri ve makroları otomatik hesaplasın.</p>
+                  </div>
+                </div>
+
+                <textarea
+                  value={aiText}
+                  onChange={e => { setAiText(e.target.value); setAiError('') }}
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAIParse() }}
+                  rows={3}
+                  placeholder="Ne yedin? Örn: Bugün kahvaltıda az yağlı 2 yumurtalı omlet, 1 dilim beyaz peynir ve 3 bardak çay içtim."
+                  className="w-full resize-none rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-night-card px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleAIParse}
+                  disabled={aiLoading || !aiText.trim()}
+                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {aiLoading ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Analiz ediliyor…
+                    </>
+                  ) : (
+                    <>🔍 Analiz Et</>
+                  )}
+                </button>
+
+                {aiError && (
+                  <p className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                    <span>❌</span> {aiError}
+                  </p>
+                )}
+              </div>
+
+              {/* AI Results */}
+              {aiResults.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-extrabold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                      Tanımlanan Besinler ({aiResults.length})
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addAllAIItemsToBasket}
+                      className="flex cursor-pointer items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-[10px] font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95"
+                    >
+                      <PlusIcon /> Tümünü Ekle
+                    </button>
+                  </div>
+
+                  {aiResults.map((item, idx) => {
+                    const grams = Math.max(1, Number(aiGrams[idx]) || item.defaultGrams)
+                    const r = grams / 100
+                    const totalKcal = Math.round(item.kcal100 * r)
+
+                    return (
+                      <div key={idx} className="rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card p-3 space-y-2.5">
+                        {/* Food header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{item.name}</p>
+                            {item.servingLabel && (
+                              <p className="mt-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                AI tahmini: {item.servingLabel}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                              {item.kcal100} kcal · P:{item.protein100}g K:{item.carbs100}g Y:{item.fat100}g / 100g
+                            </p>
+                          </div>
+                          <span className="flex-shrink-0 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+                            {totalKcal} kcal
+                          </span>
+                        </div>
+
+                        {/* Macro chips */}
+                        <div className="grid grid-cols-5 gap-1 text-center">
+                          {[
+                            { label: 'Protein', val: Math.round(item.protein100 * r * 10) / 10, color: 'text-indigo-600 dark:text-indigo-400' },
+                            { label: 'Karb',    val: Math.round(item.carbs100   * r * 10) / 10, color: 'text-amber-600 dark:text-amber-400'  },
+                            { label: 'Yağ',     val: Math.round(item.fat100     * r * 10) / 10, color: 'text-rose-500 dark:text-rose-400'    },
+                            { label: 'Lif',     val: Math.round(item.fiber100   * r * 10) / 10, color: 'text-teal-600 dark:text-teal-400'    },
+                            { label: 'Şeker',   val: Math.round(item.sugar100   * r * 10) / 10, color: 'text-pink-600 dark:text-pink-400'    },
+                          ].map(({ label, val, color }) => (
+                            <div key={label} className="rounded-lg bg-slate-50 dark:bg-night-muted px-1 py-1.5">
+                              <p className={`text-[9px] font-bold ${color}`}>{label}</p>
+                              <p className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100">{val}g</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Smart unit chips (AI-generated) */}
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Porsiyon</p>
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {item.units.filter(u => u.grams !== null).map(u => (
+                              <button key={u.id} type="button"
+                                onClick={() => setAiGrams(prev => ({ ...prev, [idx]: String(u.grams) }))}
+                                className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
+                                  Number(aiGrams[idx]) === u.grams
+                                    ? 'bg-emerald-500 text-white shadow-sm'
+                                    : 'bg-slate-100 dark:bg-night-border text-slate-600 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border border-slate-200 dark:border-night-border'
+                                }`}>
+                                {u.label} ({u.grams}g)
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number" inputMode="numeric" min="1"
+                              value={aiGrams[idx] ?? String(item.defaultGrams)}
+                              onChange={e => setAiGrams(prev => ({ ...prev, [idx]: e.target.value }))}
+                              className="w-20 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400"
+                            />
+                            <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
+                            <button type="button" onClick={() => addAIItemToBasket(item, idx)}
+                              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95">
+                              <PlusIcon /> Sepete Ekle · {totalKcal} kcal
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Save to favorites */}
+                        <div className="border-t border-slate-100 dark:border-night-border pt-2">
+                          {aiSaveIdx === idx ? (
+                            <div className="flex gap-2">
+                              <input type="text"
+                                value={aiSaveName}
+                                onChange={e => setAiSaveName(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleSaveAIItem(idx)}
+                                placeholder={item.name}
+                                className="flex-1 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-amber-500"
+                              />
+                              <button type="button" onClick={() => handleSaveAIItem(idx)}
+                                className="cursor-pointer rounded-xl bg-amber-500 px-3 py-2 text-xs font-extrabold text-white hover:bg-amber-600 transition-colors">⭐</button>
+                              <button type="button" onClick={() => { setAiSaveIdx(null); setAiSaveName('') }}
+                                className="cursor-pointer rounded-xl bg-slate-100 dark:bg-night-muted px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 transition-colors">İptal</button>
+                            </div>
+                          ) : (
+                            <button type="button"
+                              onClick={() => { setAiSaveIdx(idx); setAiSaveName(item.name) }}
+                              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/10 py-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 transition-all hover:bg-amber-100 dark:hover:bg-amber-900/20">
+                              <span>⭐</span> Favorilere Kaydet
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ═══ SAVED FOODS TAB ═══ */}
           {tab === 'saved' && (
             <div className="space-y-3">
@@ -746,71 +1104,172 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                   <span className="text-4xl">⭐</span>
                   <p className="text-sm font-bold text-slate-600 dark:text-slate-400">Henüz kayıtlı yemek yok</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500 leading-relaxed max-w-xs">
-                    Barkod taradıktan sonra ürün kartındaki "Favorilere Kaydet" butonuyla buraya ekleyebilirsiniz.
+                    "YZ ile Ekle" veya "Barkod Tara" sekmesindeki ürün kartlarından "Favorilere Kaydet" butonuyla buraya ekleyebilirsiniz.
                   </p>
                 </div>
-              ) : savedFoods.map(food => (
-                <div key={food.id} className="rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card p-3 space-y-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100">{food.nickname}</p>
-                      {food.originalName && food.originalName !== food.nickname && (
-                        <p className="mt-0.5 truncate text-[10px] text-slate-400 dark:text-slate-500">{food.originalName}</p>
-                      )}
-                    </div>
-                    <div className="flex flex-shrink-0 items-center gap-1.5">
-                      <span className="rounded-lg bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400">
-                        {food.kcal100} kcal/100g
-                      </span>
-                      <button type="button" onClick={() => deleteSavedFood(food.id)}
-                        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg text-slate-300 dark:text-night-muted hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-400 transition-colors"
-                        aria-label="Sil">
-                        <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+              ) : savedFoods.map(food => {
+                const defaultG = food.defaultGrams || 100
+                const grams    = Math.max(1, Number(savedFoodGrams[food.id] ?? defaultG))
+                const r        = grams / 100
+                const totalKcal = Math.round(food.kcal100 * r)
+                const quickKcal = Math.round(food.kcal100 * (defaultG / 100))
+                const isEditing = editingFoodId === food.id
 
-                  <div className="flex gap-1 text-center">
-                    {[
-                      { label: 'P', val: food.protein100, color: 'text-indigo-500' },
-                      { label: 'K', val: food.carbs100,   color: 'text-amber-500'  },
-                      { label: 'Y', val: food.fat100,     color: 'text-rose-400'   },
-                      { label: 'L', val: food.fiber100,   color: 'text-teal-500'   },
-                      { label: 'Ş', val: food.sugar100,   color: 'text-pink-500'   },
-                    ].map(({ label, val, color }) => (
-                      <div key={label} className="flex-1 rounded-lg bg-slate-50 dark:bg-night-muted px-1 py-1">
-                        <p className={`text-[9px] font-extrabold ${color}`}>{label}</p>
-                        <p className="text-[9px] font-bold text-slate-700 dark:text-slate-300">{val}g</p>
+                return (
+                  <div key={food.id} className={`rounded-2xl border bg-white dark:bg-night-card p-3 space-y-2.5 transition-all ${
+                    isEditing ? 'border-amber-300 dark:border-amber-700' : 'border-slate-100 dark:border-night-border'
+                  }`}>
+
+                    {/* ── Card header: name + action icons ── */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100">{food.nickname}</p>
+                        {food.originalName && food.originalName !== food.nickname && (
+                          <p className="mt-0.5 truncate text-[10px] text-slate-400 dark:text-slate-500">{food.originalName}</p>
+                        )}
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                          {food.kcal100} kcal · P:{food.protein100}g K:{food.carbs100}g Y:{food.fat100}g / 100g
+                        </p>
                       </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* Smart serving unit quick-select based on food nickname */}
-                    <div className="flex gap-1">
-                      {deriveSmartServingUnits(food.nickname).filter(u => u.grams !== null).map(u => (
-                        <button key={u.id} type="button"
-                          onClick={() => setSavedFoodGrams(prev => ({ ...prev, [food.id]: String(u.grams) }))}
-                          className="cursor-pointer rounded-lg bg-slate-100 dark:bg-night-muted px-2 py-1 text-[9px] font-bold text-slate-600 dark:text-slate-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 transition-colors">
-                          {u.label}
+                      <div className="flex flex-shrink-0 items-center gap-1">
+                        {/* Düzenle */}
+                        <button type="button"
+                          onClick={() => isEditing ? (setEditingFoodId(null), setEditFields({})) : handleStartEdit(food)}
+                          className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg transition-colors ${
+                            isEditing
+                              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                              : 'text-slate-300 dark:text-slate-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-500'
+                          }`}
+                          aria-label="Düzenle">
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                          </svg>
                         </button>
-                      ))}
+                        {/* Sil */}
+                        <button type="button" onClick={() => deleteSavedFood(food.id)}
+                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-300 dark:text-slate-600 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-400 transition-colors"
+                          aria-label="Sil">
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
-                    <input type="number" inputMode="numeric" min="1"
-                      value={savedFoodGrams[food.id] ?? '100'}
-                      onChange={e => setSavedFoodGrams(prev => ({ ...prev, [food.id]: e.target.value }))}
-                      className="w-14 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400" />
-                    <span className="text-[10px] text-slate-400">g</span>
-                    <button type="button" onClick={() => addSavedFoodToBasket(food)}
-                      className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl bg-emerald-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95">
-                      <PlusIcon />
-                      {Math.round(food.kcal100 * (Math.max(1, Number(savedFoodGrams[food.id] ?? 100)) / 100))} kcal
-                    </button>
+
+                    {/* ── Inline edit form ── */}
+                    {isEditing && (
+                      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 p-3 space-y-2.5">
+                        <p className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-400">Düzenle</p>
+                        <input type="text"
+                          value={editFields.nickname || ''}
+                          onChange={e => setEditFields(f => ({ ...f, nickname: e.target.value }))}
+                          placeholder="Takma ad"
+                          className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-amber-500"
+                        />
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Varsayılan porsiyon:</label>
+                          <input type="number" inputMode="numeric" min="1"
+                            value={editFields.defaultGrams || ''}
+                            onChange={e => setEditFields(f => ({ ...f, defaultGrams: e.target.value }))}
+                            className="w-16 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-amber-500"
+                          />
+                          <span className="text-[10px] text-slate-400">g</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[
+                            { key: 'kcal100',    label: 'Kal*',   color: 'text-emerald-600 dark:text-emerald-400' },
+                            { key: 'protein100', label: 'Protein', color: 'text-indigo-600 dark:text-indigo-400'  },
+                            { key: 'carbs100',   label: 'Karb',    color: 'text-amber-600 dark:text-amber-400'    },
+                            { key: 'fat100',     label: 'Yağ',     color: 'text-rose-500 dark:text-rose-400'      },
+                            { key: 'fiber100',   label: 'Lif',     color: 'text-teal-600 dark:text-teal-400'      },
+                            { key: 'sugar100',   label: 'Şeker',   color: 'text-pink-600 dark:text-pink-400'      },
+                          ].map(({ key, label, color }) => (
+                            <div key={key} className="rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-night-card px-2 py-1.5 text-center">
+                              <label className={`block text-[9px] font-bold ${color}`}>{label}</label>
+                              <input type="number" inputMode="decimal" min="0"
+                                value={editFields[key] ?? ''}
+                                onChange={e => setEditFields(f => ({ ...f, [key]: e.target.value }))}
+                                placeholder="0"
+                                className="mt-0.5 w-full bg-transparent text-center text-sm font-extrabold text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-200"
+                              />
+                              <span className="text-[9px] text-slate-400">{key === 'kcal100' ? 'kcal' : 'g'}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => handleEditSave(food.id)}
+                            className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl bg-amber-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-amber-600 active:scale-95">
+                            ✓ Kaydet
+                          </button>
+                          <button type="button" onClick={() => { setEditingFoodId(null); setEditFields({}) }}
+                            className="cursor-pointer rounded-xl bg-slate-100 dark:bg-night-muted px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 transition-colors">
+                            İptal
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Macro chips (scaled to current gram input) ── */}
+                    {!isEditing && (
+                      <div className="flex gap-1 text-center">
+                        {[
+                          { label: 'P', val: Math.round(food.protein100 * r * 10) / 10, color: 'text-indigo-500' },
+                          { label: 'K', val: Math.round(food.carbs100   * r * 10) / 10, color: 'text-amber-500'  },
+                          { label: 'Y', val: Math.round(food.fat100     * r * 10) / 10, color: 'text-rose-400'   },
+                          { label: 'L', val: Math.round((food.fiber100 || 0) * r * 10) / 10, color: 'text-teal-500' },
+                          { label: 'Ş', val: Math.round((food.sugar100 || 0) * r * 10) / 10, color: 'text-pink-500' },
+                        ].map(({ label, val, color }) => (
+                          <div key={label} className="flex-1 rounded-lg bg-slate-50 dark:bg-night-muted px-1 py-1">
+                            <p className={`text-[9px] font-extrabold ${color}`}>{label}</p>
+                            <p className="text-[9px] font-bold text-slate-700 dark:text-slate-300">{val}g</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* ── Hızlı Ekle button (uses saved default serving) ── */}
+                    {!isEditing && (
+                      <button type="button" onClick={() => quickAddSavedFood(food)}
+                        className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-emerald-200 dark:shadow-none transition-all hover:bg-emerald-600 active:scale-95">
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                        </svg>
+                        Hızlı Ekle
+                        <span className="rounded-full bg-emerald-400/40 px-2 py-0.5 text-[9px] font-extrabold">
+                          {defaultG}g · {quickKcal} kcal
+                        </span>
+                      </button>
+                    )}
+
+                    {/* ── Custom gram input + add ── */}
+                    {!isEditing && (
+                      <div className="flex items-center gap-2">
+                        {food.defaultGrams && food.defaultGrams !== 100 && (
+                          <button type="button"
+                            onClick={() => setSavedFoodGrams(prev => ({ ...prev, [food.id]: String(food.defaultGrams) }))}
+                            className="cursor-pointer rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-2 py-1 text-[9px] font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors flex-shrink-0">
+                            {food.defaultGrams}g
+                          </button>
+                        )}
+                        <button type="button"
+                          onClick={() => setSavedFoodGrams(prev => ({ ...prev, [food.id]: '100' }))}
+                          className="cursor-pointer rounded-lg bg-slate-100 dark:bg-night-muted px-2 py-1 text-[9px] font-bold text-slate-600 dark:text-slate-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 transition-colors flex-shrink-0">
+                          100g
+                        </button>
+                        <input type="number" inputMode="numeric" min="1"
+                          value={savedFoodGrams[food.id] ?? defaultG}
+                          onChange={e => setSavedFoodGrams(prev => ({ ...prev, [food.id]: e.target.value }))}
+                          className="w-14 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400" />
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">g</span>
+                        <button type="button" onClick={() => addSavedFoodToBasket(food)}
+                          className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-300 dark:border-emerald-700 py-1.5 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 transition-all hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-95">
+                          <PlusIcon /> {totalKcal} kcal ekle
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
@@ -912,6 +1371,13 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         </div>
 
       </div>
+
+      {scannerOpen && (
+        <BarcodeScanner
+          onScan={handleBarcodeScanned}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </div>
   )
 }

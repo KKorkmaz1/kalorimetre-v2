@@ -1,76 +1,95 @@
 /**
- * DietContext — single source of truth for the whole app.
+ * DietContext — Supabase-backed global state.
+ *
+ * Data sources:
+ *   profiles    → supabase table  (profile goals, raw_data blob)
+ *   daily_logs  → supabase table  (today's meals + water, keyed by user+date)
+ *
+ * All mutations use optimistic updates: React state is updated instantly,
+ * then the async Supabase upsert runs in the background.
  *
  * Provides:
- *   profile        — user profile object
- *   macros         — { protein, carbs, fat, fiber, sugar } derived from goal + dailyGoal
- *   consumed       — { kcal, protein, carbs, fat } for today
+ *   profile        — full user profile object (null = new user, undefined = loading)
+ *   macros         — { protein, carbs, fat, fiber, sugar } derived from goal
+ *   consumed       — { kcal, protein, carbs, fat, fiber, sugar } for today
  *   logs           — today's food log entries
  *   water          — glasses of water today
- *   recipes        — saved meal recipes array
- *   updateProfile  — saves profile to LS + updates state
- *   addLog         — adds a food/meal log entry (supports basket items array)
- *   deleteLog      — removes a log entry by id
- *   setWater       — updates today's water count
- *   saveRecipe     — persists a basket as a named recipe
- *   deleteRecipe   — removes a saved recipe by id
+ *   userId         — current Supabase UID (for child components that need it)
+ *   updateProfile  — upserts profile to Supabase
+ *   addLog / updateLog / deleteLog
+ *   setWater
  */
 
 import { createContext, useContext, useState, useEffect, useMemo } from 'react'
-import { getUserProfile, saveUserProfile } from '../utils/storage'
+import { supabase } from '../utils/supabaseClient'
 import { calcMacros, goalOffsetToId } from '../utils/macroEngine'
 
 const DietContext = createContext(null)
 
-// ─── Per-day store ────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function todayKey() {
-  return `kalorimetre_day_${new Date().toISOString().slice(0, 10)}`
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
 }
 
-function loadDayStore() {
-  try {
-    const raw = window.localStorage.getItem(todayKey())
-    if (!raw) return { logs: [], water: 0 }
-    const p = JSON.parse(raw)
-    return { logs: Array.isArray(p.logs) ? p.logs : [], water: Number(p.water) || 0 }
-  } catch { return { logs: [], water: 0 } }
-}
-
-function persistDayStore(data) {
-  try { window.localStorage.setItem(todayKey(), JSON.stringify(data)) } catch {}
-}
-
-// ─── Recipes store ────────────────────────────────────────────────────────────
-
-const RECIPES_KEY = 'kalorimetre_recipes'
-
-function loadRecipes() {
-  try {
-    const raw = window.localStorage.getItem(RECIPES_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return []
-}
-
-function persistRecipes(recipes) {
-  try { window.localStorage.setItem(RECIPES_KEY, JSON.stringify(recipes)) } catch {}
+function extractMacroTargets(profile) {
+  const dailyGoal = Number(profile?.dailyGoal) || 0
+  if (!dailyGoal) return { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  const goalId = profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset)
+  const m = calcMacros(dailyGoal, goalId) ?? {}
+  return {
+    calories: dailyGoal,
+    protein:  m.protein ?? 0,
+    carbs:    m.carbs   ?? 0,
+    fat:      m.fat     ?? 0,
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-export function DietProvider({ children }) {
-  const [profile,  setProfile]  = useState(undefined)
-  const [day,      setDay]      = useState({ logs: [], water: 0 })
-  const [recipes,  setRecipes]  = useState([])
+export function DietProvider({ children, userId }) {
+  const [profile, setProfile] = useState(undefined) // undefined = loading
+  const [day,     setDay]     = useState({ logs: [], water: 0 })
 
+  // ── Initial data load from Supabase ────────────────────────────────────────
   useEffect(() => {
-    setProfile(getUserProfile() ?? null)
-    setDay(loadDayStore())
-    setRecipes(loadRecipes())
-  }, [])
+    if (!userId) return
 
-  // ── Derived totals ────────────────────────────────────────────────────────
+    let cancelled = false
+
+    async function load() {
+      try {
+        const [profileRes, logsRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('raw_data')
+            .eq('id', userId)
+            .maybeSingle(),
+          supabase
+            .from('daily_logs')
+            .select('meals_data')
+            .eq('user_id', userId)
+            .eq('date', todayStr())
+            .maybeSingle(),
+        ])
+
+        if (cancelled) return
+
+        setProfile(profileRes.data?.raw_data ?? null)
+        setDay(logsRes.data?.meals_data ?? { logs: [], water: 0 })
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[DietContext] load error:', err)
+          setProfile(null)
+        }
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [userId])
+
+  // ── Derived totals ─────────────────────────────────────────────────────────
   const consumed = useMemo(() => {
     const { logs } = day
     return {
@@ -83,11 +102,10 @@ export function DietProvider({ children }) {
     }
   }, [day.logs])
 
-  // ── Goal-based macros (with fiber + sugar) ────────────────────────────────
+  // ── Goal-based macros ──────────────────────────────────────────────────────
   const macros = useMemo(() => {
     const dailyGoal = Number(profile?.dailyGoal) || 0
     if (!dailyGoal) return null
-    // If user has custom macro percentages from HedefDuzenle, apply them to current dailyGoal
     if (profile?.macroPercent) {
       const { protein: pp = 25, carbs: cp = 50, fat: fp = 25 } = profile.macroPercent
       return {
@@ -102,13 +120,61 @@ export function DietProvider({ children }) {
     return calcMacros(dailyGoal, goalId)
   }, [profile])
 
-  // ── Profile ───────────────────────────────────────────────────────────────
-  function updateProfile(newProfile) {
-    saveUserProfile(newProfile)
-    setProfile(newProfile)
+  // ── Supabase persistence helpers ───────────────────────────────────────────
+
+  async function persistDay(newDay) {
+    if (!userId) return
+    const totalKcal = newDay.logs.reduce((s, l) => s + (Number(l.kcal) || 0), 0)
+    try {
+      await supabase
+        .from('daily_logs')
+        .upsert(
+          {
+            user_id:    userId,
+            date:       todayStr(),
+            total_kcal: totalKcal,
+            meals_data: newDay,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,date' },
+        )
+    } catch (err) {
+      console.error('[DietContext] persistDay error:', err)
+    }
   }
 
-  // ── Day logs ──────────────────────────────────────────────────────────────
+  // ── Profile ────────────────────────────────────────────────────────────────
+
+  async function updateProfile(newProfile) {
+    const profileToSave = userId ? { ...newProfile, userId } : newProfile
+    // Optimistic: update UI immediately
+    setProfile(profileToSave)
+
+    if (!userId) return
+
+    const targets = extractMacroTargets(profileToSave)
+    try {
+      await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id:              userId,
+            target_calories: targets.calories,
+            target_protein:  targets.protein,
+            target_carbs:    targets.carbs,
+            target_fat:      targets.fat,
+            raw_data:        profileToSave,
+            updated_at:      new Date().toISOString(),
+          },
+          { onConflict: 'id' },
+        )
+    } catch (err) {
+      console.error('[DietContext] updateProfile error:', err)
+    }
+  }
+
+  // ── Daily logs ─────────────────────────────────────────────────────────────
+
   function addLog(entry) {
     const newEntry = {
       id:        crypto.randomUUID(),
@@ -122,15 +188,12 @@ export function DietProvider({ children }) {
       fiber:     Number(entry.fiber)   || 0,
       sugar:     Number(entry.sugar)   || 0,
     }
-    // Preserve optional extended fields (basket items, serving info)
-    if (Array.isArray(entry.items) && entry.items.length > 0) {
-      newEntry.items = entry.items
-    }
+    if (Array.isArray(entry.items) && entry.items.length > 0) newEntry.items = entry.items
     if (entry.servingInfo) newEntry.servingInfo = entry.servingInfo
 
     setDay(prev => {
       const next = { ...prev, logs: [...prev.logs, newEntry] }
-      persistDayStore(next)
+      persistDay(next)
       return next
     })
     return newEntry
@@ -139,7 +202,7 @@ export function DietProvider({ children }) {
   function updateLog(id, updates) {
     setDay(prev => {
       const next = { ...prev, logs: prev.logs.map(l => l.id === id ? { ...l, ...updates } : l) }
-      persistDayStore(next)
+      persistDay(next)
       return next
     })
   }
@@ -147,7 +210,7 @@ export function DietProvider({ children }) {
   function deleteLog(id) {
     setDay(prev => {
       const next = { ...prev, logs: prev.logs.filter(l => l.id !== id) }
-      persistDayStore(next)
+      persistDay(next)
       return next
     })
   }
@@ -156,37 +219,29 @@ export function DietProvider({ children }) {
     const clamped = Math.max(0, Math.min(16, Number(count) || 0))
     setDay(prev => {
       const next = { ...prev, water: clamped }
-      persistDayStore(next)
+      persistDay(next)
       return next
     })
   }
 
-  // ── Recipes ───────────────────────────────────────────────────────────────
-  function saveRecipe(recipeData) {
-    const newRecipe = {
-      id:        crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      ...recipeData,
-    }
-    setRecipes(prev => {
-      const next = [...prev, newRecipe]
-      persistRecipes(next)
-      return next
-    })
-    return newRecipe
-  }
-
-  function deleteRecipe(id) {
-    setRecipes(prev => {
-      const next = prev.filter(r => r.id !== id)
-      persistRecipes(next)
-      return next
-    })
-  }
+  // ── Context value ──────────────────────────────────────────────────────────
 
   const value = {
-    profile, macros, consumed, logs: day.logs, water: day.water, recipes,
-    updateProfile, addLog, updateLog, deleteLog, setWater, saveRecipe, deleteRecipe,
+    profile,
+    macros,
+    consumed,
+    logs:    day.logs,
+    water:   day.water,
+    userId,
+    updateProfile,
+    addLog,
+    updateLog,
+    deleteLog,
+    setWater,
+    // Kept for API compatibility — ephemeral in-memory only
+    recipes:       [],
+    saveRecipe:    () => {},
+    deleteRecipe:  () => {},
   }
 
   return <DietContext.Provider value={value}>{children}</DietContext.Provider>

@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useDiet } from '../context/DietContext'
 import { ProteinIcon, CarbsIcon, FatIcon } from './Meal/MealIcons'
+import { supabase } from '../utils/supabaseClient'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -12,63 +13,8 @@ const TR_DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumar
 
 const DAY_HEADERS = ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz']
 
-const MOCK_MEAL_NAMES = [
-  ['Yumurta & Peynir', 'Yulaf Ezmesi', 'Simit & Çay', 'Menemen', 'Tahıllı Ekmek & Reçel'],
-  ['Tavuk Pilav', 'Mercimek Çorbası', 'Kuru Fasulye Pilav', 'Izgara Köfte', 'Makarna'],
-  ['Elma & Badem', 'Yoğurt', 'Çay & Bisküvi', 'Meyve Tabağı', 'Ceviz & Peynir'],
-  ['Izgara Somon', 'Tavuk Sote', 'Köfte & Salata', 'Sebze Çorbası', 'Bulgur Pilavı'],
-]
 
-// ─── Deterministic mock helpers ───────────────────────────────────────────────
 
-function seededRand(n) {
-  const x = Math.sin(n + 1) * 43758.5453123
-  return x - Math.floor(x)
-}
-
-function buildDayData(year, month, day, tdee = 2000) {
-  const today = new Date()
-  today.setHours(23, 59, 59, 999)
-  const thisDay = new Date(year, month, day)
-  if (thisDay > today) return null
-
-  const seed = year * 10000 + (month + 1) * 100 + day
-  const r1 = seededRand(seed)
-  const r2 = seededRand(seed * 3 + 7)
-  const r3 = seededRand(seed * 5 + 13)
-
-  if (r3 < 0.12) return { logged: false }
-
-  const kcalDelta = Math.round((r1 - 0.42) * tdee * 0.28)
-  const kcal      = Math.max(1100, Math.round((tdee + kcalDelta) / 10) * 10)
-  const status    = kcal <= tdee * 1.07 ? 'success' : 'failed'
-  const water     = Math.floor(r2 * 6) + 3
-
-  return { logged: true, status, kcal, water }
-}
-
-function buildMockMeals(totalKcal, seed) {
-  const pcts  = [0.25, 0.35, 0.10, 0.30]
-  const times = ['07:30', '12:30', '15:30', '19:00']
-  const types = ['Kahvaltı', 'Öğle', 'Ara Öğün', 'Akşam']
-
-  return types.map((mealType, i) => {
-    const r       = seededRand(seed * (i + 1) + 3)
-    const nameIdx = Math.floor(seededRand(seed * (i + 2) + 7) * MOCK_MEAL_NAMES[i].length)
-    const kcal    = Math.max(50, Math.round(totalKcal * pcts[i] * (0.85 + r * 0.30)))
-    return {
-      id:       `mock_${seed}_${i}`,
-      isMock:   true,
-      mealType,
-      name:     MOCK_MEAL_NAMES[i][nameIdx],
-      time:     times[i],
-      kcal,
-      protein:  Math.round(kcal * 0.25 / 4),
-      carbs:    Math.round(kcal * 0.45 / 4),
-      fat:      Math.round(kcal * 0.30 / 9),
-    }
-  })
-}
 
 function getDaysInMonth(y, m) { return new Date(y, m + 1, 0).getDate() }
 
@@ -77,13 +23,30 @@ function getStartOffset(y, m) {
   return (dow + 6) % 7
 }
 
-function readDayStore(year, month, day) {
-  try {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    const raw = window.localStorage.getItem(`kalorimetre_day_${dateStr}`)
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return null
+function toDateStr(year, month, day) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// Build a single day's calendar entry from pre-fetched Supabase data.
+// monthMap: { 'YYYY-MM-DD': { logs: [...], water: N } }
+function buildDayData(year, month, day, tdee = 2000, monthMap = {}) {
+  const today = new Date()
+  today.setHours(23, 59, 59, 999)
+  const thisDay = new Date(year, month, day)
+
+  if (thisDay > today) return null // future
+
+  const stored = monthMap[toDateStr(year, month, day)]
+  if (!stored || !Array.isArray(stored.logs) || stored.logs.length === 0) {
+    return { logged: false }
+  }
+
+  const kcal = stored.logs.reduce((s, l) => s + (Number(l.kcal) || 0), 0)
+  if (kcal === 0) return { logged: false }
+
+  const water  = stored.water ?? 0
+  const status = tdee > 0 && kcal > tdee * 1.15 ? 'failed' : 'success'
+  return { logged: true, status, kcal, water, storedData: stored }
 }
 
 function fmtTime(isoString) {
@@ -145,17 +108,17 @@ const MEAL_TYPE_META = {
   'Ara Öğün': { text: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-900/20'      },
 }
 
-function DayDetailModal({ year, month, day, mockData, onClose }) {
+// storedData: the pre-fetched { logs, water } object from Supabase (may be null)
+// dayEntry:   the buildDayData result ({ logged, status, kcal, water })
+function DayDetailModal({ year, month, day, storedData, dayEntry, onClose }) {
   const { profile } = useDiet()
-
-  const stored = useMemo(() => readDayStore(year, month, day), [year, month, day])
 
   const calorieTarget = (profile?.tdee ?? 0) + (profile?.goalOffset ?? 0)
   const macroTarget   = profile?.macros ?? { protein: 130, carbs: 260, fat: 65 }
   const waterGoal     = profile?.waterGoal ?? 8
 
-  const logs  = stored?.logs  ?? buildMockMeals(mockData?.kcal ?? 1800, year * 10000 + (month + 1) * 100 + day)
-  const water = stored?.water ?? mockData?.water ?? 0
+  const logs  = storedData?.logs  ?? []
+  const water = storedData?.water ?? 0
 
   const consumed = useMemo(() => ({
     kcal:    logs.reduce((s, l) => s + (Number(l.kcal)    || 0), 0),
@@ -165,7 +128,7 @@ function DayDetailModal({ year, month, day, mockData, onClose }) {
   }), [logs])
 
   const kcalPct   = calorieTarget > 0 ? Math.min(100, Math.round((consumed.kcal / calorieTarget) * 100)) : 0
-  const isSuccess = !mockData || mockData.status === 'success'
+  const isSuccess = !dayEntry?.logged || dayEntry.status === 'success'
 
   const jsDay    = new Date(year, month, day).getDay()
   const dowLabel = TR_DAYS[(jsDay + 6) % 7]
@@ -191,7 +154,7 @@ function DayDetailModal({ year, month, day, mockData, onClose }) {
               <h2 className="mt-0.5 text-base font-extrabold text-slate-900 dark:text-slate-100">{dateLabel}</h2>
             </div>
             <div className="flex items-center gap-2">
-              {mockData?.logged && (
+              {dayEntry?.logged && (
                 <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${
                   isSuccess
                     ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
@@ -444,16 +407,54 @@ function DayCell({ day, data, isToday, onClick, target = 2000 }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function History() {
-  const { profile } = useDiet()
+  const { profile, userId } = useDiet()
   const today  = new Date()
   const [year,  setYear]  = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
 
-  const [selectedCell, setSelectedCell] = useState(null)
+  const [selectedCell,  setSelectedCell]  = useState(null)
+  const [monthMap,      setMonthMap]      = useState({}) // { 'YYYY-MM-DD': { logs, water } }
+  const [loadingMonth,  setLoadingMonth]  = useState(false)
 
   const tdee = profile?.tdee ?? 2000
 
   const atMax = year === today.getFullYear() && month === today.getMonth()
+
+  // ── Fetch all daily_logs for the displayed month ───────────────────────────
+  useEffect(() => {
+    if (!userId) return
+
+    let cancelled = false
+    setLoadingMonth(true)
+
+    const from = toDateStr(year, month, 1)
+    const to   = toDateStr(year, month, getDaysInMonth(year, month))
+
+    supabase
+      .from('daily_logs')
+      .select('date, meals_data')
+      .eq('user_id', userId)
+      .gte('date', from)
+      .lte('date', to)
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) console.error('[History] fetch error:', error)
+        // Build the map from whatever rows came back (empty array = no entries yet)
+        const map = {}
+        for (const row of data ?? []) {
+          if (row?.date && row?.meals_data) map[row.date] = row.meals_data
+        }
+        setMonthMap(map)
+      })
+      .catch(err => {
+        if (!cancelled) console.error('[History] unexpected error:', err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMonth(false)
+      })
+
+    return () => { cancelled = true }
+  }, [userId, year, month])
 
   function prevMonth() {
     if (month === 0) { setYear(y => y - 1); setMonth(11) }
@@ -478,10 +479,10 @@ export default function History() {
   const dayDataMap = useMemo(() => {
     const map = {}
     for (let d = 1; d <= daysInMonth; d++) {
-      map[d] = buildDayData(year, month, d, tdee)
+      map[d] = buildDayData(year, month, d, tdee, monthMap)
     }
     return map
-  }, [year, month, daysInMonth, tdee])
+  }, [year, month, daysInMonth, tdee, monthMap])
 
   const { successCount, failedCount, avgKcal } = useMemo(() => {
     let success = 0, failed = 0, total = 0, count = 0
@@ -548,7 +549,14 @@ export default function History() {
       </div>
 
       {/* ── Calendar grid ── */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card shadow-sm">
+        {/* Loading overlay */}
+        {loadingMonth && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-night-card/70 backdrop-blur-sm rounded-2xl">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 dark:border-night-border border-t-emerald-500" />
+          </div>
+        )}
+
         {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-slate-100 dark:border-night-border bg-slate-50 dark:bg-night-muted">
           {DAY_HEADERS.map(d => (
@@ -558,16 +566,23 @@ export default function History() {
 
         {/* Cells — gap-px creates hairline separators using the parent background color */}
         <div className="grid grid-cols-7 gap-px bg-slate-100 dark:bg-night-border">
-          {cells.map((day, idx) => (
-            <DayCell
-              key={idx}
-              day={day}
-              data={day ? dayDataMap[day] : null}
-              isToday={isCurrentMonth && day === today.getDate()}
-              target={tdee}
-              onClick={day ? () => setSelectedCell({ year, month, day, data: dayDataMap[day] }) : undefined}
-            />
-          ))}
+          {cells.map((day, idx) => {
+            const entry = day ? dayDataMap[day] : null
+            return (
+              <DayCell
+                key={idx}
+                day={day}
+                data={entry}
+                isToday={isCurrentMonth && day === today.getDate()}
+                target={tdee}
+                onClick={day ? () => setSelectedCell({
+                  year, month, day,
+                  dayEntry:   entry,
+                  storedData: entry?.storedData ?? null,
+                }) : undefined}
+              />
+            )
+          })}
         </div>
       </div>
 
@@ -601,7 +616,8 @@ export default function History() {
           year={selectedCell.year}
           month={selectedCell.month}
           day={selectedCell.day}
-          mockData={selectedCell.data}
+          storedData={selectedCell.storedData}
+          dayEntry={selectedCell.dayEntry}
           onClose={() => setSelectedCell(null)}
         />
       )}
