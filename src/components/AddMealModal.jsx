@@ -14,15 +14,42 @@ async function fetchOpenFoodFacts(barcode) {
   return res.json()
 }
 
-// ─── Serving unit presets ─────────────────────────────────────────────────────
+// ─── Serving unit pool ────────────────────────────────────────────────────────
 
-const SERVING_UNITS = [
-  { id: 'gram',    label: 'Gram',     grams: null },
-  { id: 'portion', label: 'Porsiyon', grams: 150  },
-  { id: 'slice',   label: 'Dilim',    grams: 30   },
-  { id: 'spoon',   label: 'Kaşık',    grams: 15   },
-  { id: 'piece',   label: 'Adet/Bar', grams: 50   },
-]
+const ALL_UNITS = {
+  gram:    { id: 'gram',    label: 'Gram',     grams: null },
+  kase:    { id: 'kase',    label: 'Kase',     grams: 50   },
+  dilim:   { id: 'dilim',   label: 'Dilim',    grams: 30   },
+  piece:   { id: 'piece',   label: 'Adet/Bar', grams: 50   },
+  spoon:   { id: 'spoon',   label: 'Kaşık',    grams: 15   },
+  glass:   { id: 'glass',   label: 'Bardak',   grams: 200  },
+  portion: { id: 'portion', label: 'Porsiyon', grams: 150  },
+}
+
+/**
+ * Derive context-aware serving units from a product name using keyword rules.
+ * Always starts with Gram so the user can type any value.
+ */
+function deriveSmartServingUnits(name) {
+  const n = (name || '').toLowerCase()
+  // Cereal / oat bowl items
+  if (/gevrek|flakes|müsli|yulaf|muesli/.test(n))
+    return [ALL_UNITS.gram, ALL_UNITS.kase]
+  // Bread / pizza / slice items
+  if (/ekmek|pizza|dilim/.test(n))
+    return [ALL_UNITS.gram, ALL_UNITS.dilim]
+  // Chocolate / bar / biscuit items
+  if (/çikolata|chocolate|tadelle|biskuvi|bisküvi|\bbar\b/.test(n))
+    return [ALL_UNITS.gram, ALL_UNITS.piece]
+  // Spreads — hazelnut creams, nut butters, Nutella-type (spoon only, no glass)
+  if (/sarelle|nutella|fıstık ezmesi|fındık|krema|hazelnut|noisettes|spread/.test(n))
+    return [ALL_UNITS.gram, ALL_UNITS.spoon]
+  // Dairy & liquids — yogurt, water, juice (spoon + glass)
+  if (/yoğurt|sıvı|\bsu\b/.test(n))
+    return [ALL_UNITS.gram, ALL_UNITS.spoon, ALL_UNITS.glass]
+  // Default
+  return [ALL_UNITS.gram, ALL_UNITS.portion]
+}
 
 // ─── Saved foods localStorage key ────────────────────────────────────────────
 
@@ -76,6 +103,18 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [barcodeGrams,   setBarcodeGrams]   = useState('100')
   const [barcodeUnit,    setBarcodeUnit]    = useState('gram')
 
+  // Unknown-product (not-found) inline form
+  const [barcodeUnknown,  setBarcodeUnknown]  = useState(false)
+  const [unknownName,     setUnknownName]     = useState('')
+  const [unknownKcal100,  setUnknownKcal100]  = useState('')
+  const [unknownProt100,  setUnknownProt100]  = useState('')
+  const [unknownCarb100,  setUnknownCarb100]  = useState('')
+  const [unknownFat100,   setUnknownFat100]   = useState('')
+  const [unknownFib100,   setUnknownFib100]   = useState('')
+  const [unknownSug100,   setUnknownSug100]   = useState('')
+  const [unknownUnit,     setUnknownUnit]     = useState('gram')
+  const [unknownGrams,    setUnknownGrams]    = useState('100')
+
   // Saved foods sub-state
   const [savedFoods,     setSavedFoods]     = useState([])
   const [saveNickname,   setSaveNickname]   = useState('')
@@ -111,20 +150,28 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setBarcodeLoading(true)
     setBarcodeError('')
     setBarcodeProduct(null)
+    setBarcodeUnknown(false)
     try {
       const data = await fetchOpenFoodFacts(code)
       if (data.status !== 1 || !data.product) {
-        setBarcodeError('Ürün bulunamadı. Barkodu kontrol edin veya manuel giriş yapın.')
+        // Product not found → enter unknown-product manual mode
+        setBarcodeUnknown(true)
+        setUnknownName('')
+        setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
+        setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
+        setUnknownUnit('gram'); setUnknownGrams('100')
         return
       }
+      setBarcodeUnknown(false)
       const p = data.product
       const n = p.nutriments || {}
       const kcal100 = Math.round(
         n['energy-kcal_100g'] ??
         (n['energy-kj_100g'] ? n['energy-kj_100g'] / 4.184 : 0)
       )
+      const productName = (p.product_name_tr || p.product_name || '').trim()
       setBarcodeProduct({
-        name:      (p.product_name_tr || p.product_name || 'Bilinmeyen Ürün').trim(),
+        name: productName || 'Bilinmeyen Ürün',
         kcal100,
         protein100: Math.round((n['proteins_100g']       || 0) * 10) / 10,
         carbs100:   Math.round((n['carbohydrates_100g']  || 0) * 10) / 10,
@@ -132,11 +179,42 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         fiber100:   Math.round((n['fiber_100g']          || 0) * 10) / 10,
         sugar100:   Math.round((n['sugars_100g']         || 0) * 10) / 10,
       })
+      // Auto-select first smart unit that has a gram preset (not "Gram")
+      const smartUnits = deriveSmartServingUnits(productName)
+      const firstPreset = smartUnits.find(u => u.grams !== null)
+      if (firstPreset) { setBarcodeUnit(firstPreset.id); setBarcodeGrams(String(firstPreset.grams)) }
+      else             { setBarcodeUnit('gram');          setBarcodeGrams('100') }
     } catch {
       setBarcodeError('Bağlantı hatası. İnternet bağlantınızı kontrol edin.')
     } finally {
       setBarcodeLoading(false)
     }
+  }
+
+  // ── Unknown-product basket add ─────────────────────────────────────────────
+  function addUnknownToBasket() {
+    if (!unknownName.trim())                       { setError('Ürün adı zorunludur.');            return }
+    if (!unknownKcal100 || Number(unknownKcal100) <= 0) { setError('Kalori değeri zorunludur.'); return }
+    const grams = Math.max(1, Number(unknownGrams) || 100)
+    const r = grams / 100
+    setBasket(prev => [...prev, {
+      id:       crypto.randomUUID(),
+      foodId:   null,
+      foodName: unknownName.trim(),
+      unit:     `${grams}g`,
+      qty:      1,
+      kcal:     Math.round(Number(unknownKcal100) * r),
+      protein:  Math.round(Number(unknownProt100 || 0) * r * 10) / 10,
+      carbs:    Math.round(Number(unknownCarb100 || 0) * r * 10) / 10,
+      fat:      Math.round(Number(unknownFat100  || 0) * r * 10) / 10,
+      fiber:    Math.round(Number(unknownFib100  || 0) * r * 10) / 10,
+      sugar:    Math.round(Number(unknownSug100  || 0) * r * 10) / 10,
+    }])
+    setUnknownName(''); setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
+    setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
+    setUnknownUnit('gram'); setUnknownGrams('100')
+    setBarcodeUnknown(false); setBarcodeOpen(false); setBarcodeInput('')
+    setError('')
   }
 
   function addBarcodeToBasket() {
@@ -289,6 +367,10 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setMFib(''); setMSug(''); setError('')
     setBarcodeOpen(false); setBarcodeInput(''); setBarcodeLoading(false)
     setBarcodeError(''); setBarcodeProduct(null); setBarcodeGrams('100'); setBarcodeUnit('gram')
+    setBarcodeUnknown(false)
+    setUnknownName(''); setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
+    setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
+    setUnknownUnit('gram'); setUnknownGrams('100')
     setShowSaveForm(false); setSaveNickname(''); setSavedFoodGrams({})
   }
 
@@ -446,10 +528,100 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                     </button>
                   </div>
 
-                  {barcodeError && (
+                  {/* Connection / validation error */}
+                  {barcodeError && !barcodeUnknown && (
                     <p className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
                       <span>❌</span> {barcodeError}
                     </p>
+                  )}
+
+                  {/* ── Unknown product — inline manual entry form ── */}
+                  {barcodeUnknown && (
+                    <div className="rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-900/10 p-3 space-y-3">
+
+                      {/* Header */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg leading-none">❓</span>
+                        <div>
+                          <p className="text-sm font-extrabold text-amber-800 dark:text-amber-300">Bilinmeyen Ürün — Manuel Ekle</p>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-500">Barkod veritabanında bulunamadı. Bilgileri kendiniz girin.</p>
+                        </div>
+                      </div>
+
+                      {/* Nickname input — drives smart serving units */}
+                      <input
+                        type="text"
+                        value={unknownName}
+                        onChange={e => { setUnknownName(e.target.value); setError('') }}
+                        placeholder="Ürün / Takma ad (örn. Kırmızı şekersiz çikolata)"
+                        className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-amber-500"
+                      />
+
+                      {/* Per-100g macro inputs */}
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">Değerler 100g Başına</p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[
+                            { val: unknownKcal100, set: setUnknownKcal100, label: 'Kalori *', color: 'text-emerald-600 dark:text-emerald-400', focus: 'focus-within:border-emerald-400' },
+                            { val: unknownProt100, set: setUnknownProt100, label: 'Protein',  color: 'text-indigo-600 dark:text-indigo-400',  focus: 'focus-within:border-indigo-400'  },
+                            { val: unknownCarb100, set: setUnknownCarb100, label: 'Karb',     color: 'text-amber-600 dark:text-amber-400',    focus: 'focus-within:border-amber-400'   },
+                            { val: unknownFat100,  set: setUnknownFat100,  label: 'Yağ',      color: 'text-rose-500 dark:text-rose-400',      focus: 'focus-within:border-rose-400'    },
+                            { val: unknownFib100,  set: setUnknownFib100,  label: 'Lif',      color: 'text-teal-600 dark:text-teal-400',      focus: 'focus-within:border-teal-400'    },
+                            { val: unknownSug100,  set: setUnknownSug100,  label: 'Şeker',    color: 'text-pink-600 dark:text-pink-400',      focus: 'focus-within:border-pink-400'    },
+                          ].map(({ val, set, label, color, focus }) => (
+                            <div key={label} className={`rounded-xl border-2 border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-2 py-2 text-center transition-all ${focus}`}>
+                              <label className={`block text-[9px] font-bold ${color}`}>{label}</label>
+                              <input
+                                type="number" inputMode="decimal" min="0"
+                                value={val}
+                                onChange={e => { set(e.target.value); setError('') }}
+                                placeholder="0"
+                                className="mt-0.5 w-full bg-transparent text-center text-base font-extrabold text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-200 dark:placeholder:text-night-muted"
+                              />
+                              <span className="text-[9px] text-slate-400">{label === 'Kalori *' ? 'kcal' : 'g'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Smart serving units derived from typed name */}
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Porsiyon Büyüklüğü</p>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {deriveSmartServingUnits(unknownName).map(u => (
+                            <button key={u.id} type="button"
+                              onClick={() => {
+                                setUnknownUnit(u.id)
+                                if (u.grams) setUnknownGrams(String(u.grams))
+                              }}
+                              className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
+                                unknownUnit === u.id
+                                  ? 'bg-amber-500 text-white shadow-sm'
+                                  : 'bg-white dark:bg-night-border text-slate-600 dark:text-slate-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                              }`}>
+                              {u.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number" inputMode="numeric" min="1"
+                            value={unknownGrams}
+                            onChange={e => { setUnknownGrams(e.target.value); setUnknownUnit('gram') }}
+                            className="w-20 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-amber-400"
+                          />
+                          <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
+                          <button type="button" onClick={addUnknownToBasket}
+                            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-amber-600 active:scale-95">
+                            <PlusIcon />
+                            Sepete Ekle
+                            {unknownKcal100 && Number(unknownKcal100) > 0
+                              ? ` · ${Math.round(Number(unknownKcal100) * (Math.max(1, Number(unknownGrams) || 100) / 100))} kcal`
+                              : ''}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   )}
 
                   {barcodeProduct && (
@@ -481,11 +653,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                         ))}
                       </div>
 
-                      {/* Serving unit selector */}
+                      {/* Serving unit selector — smart units derived from product name */}
                       <div>
                         <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Porsiyon Büyüklüğü</p>
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {SERVING_UNITS.map(u => (
+                          {deriveSmartServingUnits(barcodeProduct.name).map(u => (
                             <button key={u.id} type="button"
                               onClick={() => {
                                 setBarcodeUnit(u.id)
@@ -616,11 +788,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* Serving unit quick-select */}
+                    {/* Smart serving unit quick-select based on food nickname */}
                     <div className="flex gap-1">
-                      {SERVING_UNITS.slice(0, 3).map(u => (
+                      {deriveSmartServingUnits(food.nickname).filter(u => u.grams !== null).map(u => (
                         <button key={u.id} type="button"
-                          onClick={() => { if (u.grams) setSavedFoodGrams(prev => ({ ...prev, [food.id]: String(u.grams) })) }}
+                          onClick={() => setSavedFoodGrams(prev => ({ ...prev, [food.id]: String(u.grams) }))}
                           className="cursor-pointer rounded-lg bg-slate-100 dark:bg-night-muted px-2 py-1 text-[9px] font-bold text-slate-600 dark:text-slate-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 transition-colors">
                           {u.label}
                         </button>
