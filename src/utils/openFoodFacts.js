@@ -41,6 +41,25 @@ export function extractPackageGrams(p) {
   return null
 }
 
+/** Extract serving size (grams) from OpenFoodFacts product object. */
+export function extractServingQuantity(p) {
+  if (p.serving_quantity) {
+    const val = parseFloat(p.serving_quantity)
+    if (!isNaN(val) && val > 0 && val <= 10000) return Math.round(val)
+  }
+  const n = p.nutriments || {}
+  if (n.serving_size) {
+    const m = String(n.serving_size).match(/([\d.,]+)\s*(g|kg|ml)\b/i)
+    if (m) {
+      let val = parseFloat(m[1].replace(',', '.'))
+      const u = m[2].toLowerCase()
+      if (u === 'kg') val *= 1000
+      if (!isNaN(val) && val > 0 && val <= 10000) return Math.round(val)
+    }
+  }
+  return null
+}
+
 /**
  * Parse OpenFoodFacts API response into normalized per-100g nutrition fields.
  * Returns null when the product is not found in the database.
@@ -64,6 +83,7 @@ export function parseOpenFoodFactsProduct(data) {
     fiber100:   Math.round((n['fiber_100g'] || 0) * 10) / 10,
     sugar100:   Math.round((n['sugars_100g'] || 0) * 10) / 10,
     packageGrams: extractPackageGrams(p),
+    servingQuantity: extractServingQuantity(p),
   }
 }
 

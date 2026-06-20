@@ -10,14 +10,45 @@ import { parseNLPMeal } from '../services/aiService'
 import { supabase } from '../utils/supabaseClient'
 import { lookupBarcode } from '../utils/openFoodFacts'
 
-// ─── Default serving units for barcode / unknown products ─────────────────────
-// AI-generated units are used for NLP results; this is a sensible static fallback.
+// ─── Serving units (no fixed gram weights — user defines per food) ────────────
 
-const DEFAULT_BARCODE_UNITS = [
-  { id: 'gram',    label: 'Gram',     grams: null },
-  { id: 'porsiyon', label: 'Porsiyon', grams: 150  },
-  { id: 'adet',   label: 'Adet',     grams: 100  },
+const SERVING_UNITS = [
+  { id: 'gram',     label: 'Gram'     },
+  { id: 'porsiyon', label: 'Porsiyon' },
+  { id: 'adet',     label: 'Adet'     },
+  { id: 'dilim',    label: 'Dilim'    },
 ]
+
+function getUnitLabel(unitId) {
+  return SERVING_UNITS.find(u => u.id === unitId)?.label ?? unitId
+}
+
+function calcTotalGrams(unit, qty, gramsPerUnit) {
+  const q = Number(qty)
+  if (!q || q <= 0) return 0
+  if (unit === 'gram') return Math.max(1, q)
+  const gpu = Number(gramsPerUnit)
+  if (!gpu || gpu <= 0) return 0
+  return Math.max(1, q * gpu)
+}
+
+function isServingValid(unit, qty, gramsPerUnit) {
+  if (!qty || Number(qty) <= 0) return false
+  if (unit === 'gram') return true
+  return Number(gramsPerUnit) > 0
+}
+
+function macrosFrom100g(values, totalGrams) {
+  const r = totalGrams / 100
+  return {
+    kcal:    Math.round(values.kcal100    * r),
+    protein: Math.round(values.protein100 * r * 10) / 10,
+    carbs:   Math.round(values.carbs100   * r * 10) / 10,
+    fat:     Math.round(values.fat100     * r * 10) / 10,
+    fiber:   Math.round((values.fiber100  || 0) * r * 10) / 10,
+    sugar:   Math.round((values.sugar100  || 0) * r * 10) / 10,
+  }
+}
 
 export default function AddMealModal({ isOpen, onClose, defaultMealType = null }) {
   const { addLog, profile, userId } = useDiet()
@@ -52,6 +83,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
           fiber100:     Number(row.fiber),
           sugar100:     Number(row.sugar),
           defaultGrams: row.default_weight ?? 100,
+          defaultUnit:  row.default_unit ?? 'gram',
           savedAt:      row.created_at,
         })))
       })
@@ -82,9 +114,10 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [barcodeLoading,      setBarcodeLoading]      = useState(false)
   const [barcodeError,        setBarcodeError]        = useState('')
   const [barcodeProduct,      setBarcodeProduct]      = useState(null)
-  const [barcodeGrams,        setBarcodeGrams]        = useState('100')
+  const [barcodeQty,          setBarcodeQty]          = useState('100')
   const [barcodeUnit,         setBarcodeUnit]         = useState('gram')
-  const [barcodePackageGrams, setBarcodePackageGrams] = useState(null) // real package weight in g
+  const [barcodeGramsPerUnit, setBarcodeGramsPerUnit] = useState('')
+  const [barcodePackageGrams, setBarcodePackageGrams] = useState(null)
 
   // Unknown-product (not-found) inline form
   const [barcodeUnknown,  setBarcodeUnknown]  = useState(false)
@@ -95,14 +128,15 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [unknownFat100,   setUnknownFat100]   = useState('')
   const [unknownFib100,   setUnknownFib100]   = useState('')
   const [unknownSug100,   setUnknownSug100]   = useState('')
-  const [unknownUnit,     setUnknownUnit]     = useState('gram')
-  const [unknownGrams,    setUnknownGrams]    = useState('100')
+  const [unknownUnit,         setUnknownUnit]         = useState('gram')
+  const [unknownQty,          setUnknownQty]          = useState('100')
+  const [unknownGramsPerUnit, setUnknownGramsPerUnit] = useState('')
 
   // Saved foods sub-state
-  const [savedFoods,     setSavedFoods]     = useState([])
-  const [saveNickname,   setSaveNickname]   = useState('')
-  const [showSaveForm,   setShowSaveForm]   = useState(false)
-  const [savedFoodGrams, setSavedFoodGrams] = useState({}) // { [foodId]: gramsString }
+  const [savedFoods,       setSavedFoods]       = useState([])
+  const [saveNickname,     setSaveNickname]     = useState('')
+  const [showSaveForm,     setShowSaveForm]     = useState(false)
+  const [savedFoodServing, setSavedFoodServing] = useState({}) // { [id]: { unit, qty, gramsPerUnit } }
 
   // Inline edit state for saved foods
   const [editingFoodId, setEditingFoodId] = useState(null)
@@ -151,15 +185,46 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       fiber100:   product.fiber100,
       sugar100:   product.sugar100,
     })
+    const servingG = product.servingQuantity
     const pkgG = product.packageGrams
     setBarcodePackageGrams(pkgG)
-    if (pkgG) {
+
+    if (servingG) {
+      setBarcodeUnit('porsiyon')
+      setBarcodeGramsPerUnit(String(servingG))
+      setBarcodeQty('1')
+    } else if (pkgG) {
       setBarcodeUnit('paket')
-      setBarcodeGrams(String(pkgG))
+      setBarcodeGramsPerUnit(String(pkgG))
+      setBarcodeQty('1')
     } else {
       setBarcodeUnit('gram')
-      setBarcodeGrams('100')
+      setBarcodeGramsPerUnit('')
+      setBarcodeQty('100')
     }
+  }
+
+  function getSavedServing(food) {
+    const saved = savedFoodServing[food.id]
+    if (saved) return saved
+    const unit = food.defaultUnit || 'gram'
+    return {
+      unit,
+      qty: unit === 'gram' ? String(food.defaultGrams || 100) : '1',
+      gramsPerUnit: unit === 'gram' ? '' : String(food.defaultGrams || ''),
+    }
+  }
+
+  function updateSavedServing(food, patch) {
+    setSavedFoodServing(prev => {
+      const unit = food.defaultUnit || 'gram'
+      const current = prev[food.id] ?? {
+        unit,
+        qty: unit === 'gram' ? String(food.defaultGrams || 100) : '1',
+        gramsPerUnit: unit === 'gram' ? '' : String(food.defaultGrams || ''),
+      }
+      return { ...prev, [food.id]: { ...current, ...patch } }
+    })
   }
 
   async function handleFetchBarcode(codeOverride) {
@@ -178,7 +243,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         setUnknownName('')
         setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
         setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
-        setUnknownUnit('gram'); setUnknownGrams('100')
+        setUnknownUnit('gram'); setUnknownQty('100'); setUnknownGramsPerUnit('')
         return
       }
       setBarcodeUnknown(false)
@@ -204,47 +269,52 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   function addUnknownToBasket() {
     if (!unknownName.trim())                       { setError('Ürün adı zorunludur.');            return }
     if (!unknownKcal100 || Number(unknownKcal100) <= 0) { setError('Kalori değeri zorunludur.'); return }
-    const grams = Math.max(1, Number(unknownGrams) || 100)
-    const r = grams / 100
+    if (!isServingValid(unknownUnit, unknownQty, unknownGramsPerUnit)) {
+      setError(unknownUnit === 'gram' ? 'Geçerli bir miktar girin.' : `"1 ${getUnitLabel(unknownUnit)} kaç gram?" alanını doldurun.`)
+      return
+    }
+    const grams = calcTotalGrams(unknownUnit, unknownQty, unknownGramsPerUnit)
+    const macros = macrosFrom100g({
+      kcal100: Number(unknownKcal100),
+      protein100: Number(unknownProt100 || 0),
+      carbs100: Number(unknownCarb100 || 0),
+      fat100: Number(unknownFat100 || 0),
+      fiber100: Number(unknownFib100 || 0),
+      sugar100: Number(unknownSug100 || 0),
+    }, grams)
     setBasket(prev => [...prev, {
       id:       crypto.randomUUID(),
       foodId:   null,
       foodName: unknownName.trim(),
-      unit:     `${grams}g`,
+      unit:     unknownUnit === 'gram' ? `${grams}g` : `${unknownQty} ${getUnitLabel(unknownUnit)}`,
       qty:      1,
-      kcal:     Math.round(Number(unknownKcal100) * r),
-      protein:  Math.round(Number(unknownProt100 || 0) * r * 10) / 10,
-      carbs:    Math.round(Number(unknownCarb100 || 0) * r * 10) / 10,
-      fat:      Math.round(Number(unknownFat100  || 0) * r * 10) / 10,
-      fiber:    Math.round(Number(unknownFib100  || 0) * r * 10) / 10,
-      sugar:    Math.round(Number(unknownSug100  || 0) * r * 10) / 10,
+      ...macros,
     }])
     setUnknownName(''); setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
     setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
-    setUnknownUnit('gram'); setUnknownGrams('100')
+    setUnknownUnit('gram'); setUnknownQty('100'); setUnknownGramsPerUnit('')
     setBarcodeUnknown(false); setBarcodeOpen(false); setBarcodeInput('')
     setError('')
   }
 
   function addBarcodeToBasket() {
     if (!barcodeProduct) return
-    const grams = Math.max(1, Number(barcodeGrams) || 100)
-    const r = grams / 100
+    if (!isServingValid(barcodeUnit, barcodeQty, barcodeGramsPerUnit)) {
+      setError(barcodeUnit === 'gram' ? 'Geçerli bir miktar girin.' : `"1 ${getUnitLabel(barcodeUnit)} kaç gram?" alanını doldurun.`)
+      return
+    }
+    const grams = calcTotalGrams(barcodeUnit, barcodeQty, barcodeGramsPerUnit)
+    const macros = macrosFrom100g(barcodeProduct, grams)
     setBasket(prev => [...prev, {
       id:       crypto.randomUUID(),
       foodId:   null,
       foodName: barcodeProduct.name,
-      unit:     `${grams}g`,
+      unit:     barcodeUnit === 'gram' ? `${grams}g` : `${barcodeQty} ${getUnitLabel(barcodeUnit)}`,
       qty:      1,
-      kcal:     Math.round(barcodeProduct.kcal100     * r),
-      protein:  Math.round(barcodeProduct.protein100  * r * 10) / 10,
-      carbs:    Math.round(barcodeProduct.carbs100    * r * 10) / 10,
-      fat:      Math.round(barcodeProduct.fat100      * r * 10) / 10,
-      fiber:    Math.round(barcodeProduct.fiber100    * r * 10) / 10,
-      sugar:    Math.round(barcodeProduct.sugar100    * r * 10) / 10,
+      ...macros,
     }])
     setBarcodeOpen(false); setBarcodeInput(''); setBarcodeProduct(null)
-    setBarcodeGrams('100'); setBarcodeUnit('gram'); setBarcodeError('')
+    setBarcodeQty('100'); setBarcodeUnit('gram'); setBarcodeGramsPerUnit(''); setBarcodeError('')
     setShowSaveForm(false); setSaveNickname('')
   }
 
@@ -252,6 +322,14 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
 
   async function handleSaveFavorite() {
     if (!barcodeProduct || !saveNickname.trim() || !userId) return
+    if (!isServingValid(barcodeUnit, barcodeQty, barcodeGramsPerUnit)) {
+      setError(barcodeUnit === 'gram' ? 'Geçerli bir miktar girin.' : `"1 ${getUnitLabel(barcodeUnit)} kaç gram?" alanını doldurun.`)
+      return
+    }
+    const defaultUnit = barcodeUnit
+    const defaultGrams = defaultUnit === 'gram'
+      ? Math.max(1, Number(barcodeQty) || 100)
+      : Math.max(1, Number(barcodeGramsPerUnit) || 0)
     const newId = crypto.randomUUID()
     const newFood = {
       id:           newId,
@@ -263,26 +341,26 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       fat100:       barcodeProduct.fat100,
       fiber100:     barcodeProduct.fiber100,
       sugar100:     barcodeProduct.sugar100,
-      defaultGrams: 100,
+      defaultUnit,
+      defaultGrams,
       savedAt:      new Date().toISOString(),
     }
-    // Optimistic update
     setSavedFoods(prev => [newFood, ...prev])
     setShowSaveForm(false)
     setSaveNickname('')
-    // Persist
     await supabase.from('saved_foods').insert({
-      id:            newId,
-      user_id:       userId,
-      nickname:      newFood.nickname,
-      original_name: newFood.originalName,
-      kcal:          newFood.kcal100,
-      protein:       newFood.protein100,
-      carbs:         newFood.carbs100,
-      fat:           newFood.fat100,
-      fiber:         newFood.fiber100,
-      sugar:         newFood.sugar100,
-      default_weight: 100,
+      id:             newId,
+      user_id:        userId,
+      nickname:       newFood.nickname,
+      original_name:  newFood.originalName,
+      kcal:           newFood.kcal100,
+      protein:        newFood.protein100,
+      carbs:          newFood.carbs100,
+      fat:            newFood.fat100,
+      fiber:          newFood.fiber100,
+      sugar:          newFood.sugar100,
+      default_unit:   defaultUnit,
+      default_weight: defaultGrams,
     })
   }
 
@@ -294,41 +372,44 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   }
 
   function quickAddSavedFood(food) {
-    const grams = Math.max(1, food.defaultGrams || 100)
-    const r = grams / 100
+    const serving = getSavedServing(food)
+    if (!isServingValid(serving.unit, serving.qty, serving.gramsPerUnit)) {
+      setError(serving.unit === 'gram' ? 'Geçerli bir miktar girin.' : `"1 ${getUnitLabel(serving.unit)} kaç gram?" alanını doldurun.`)
+      return
+    }
+    const grams = calcTotalGrams(serving.unit, serving.qty, serving.gramsPerUnit)
+    const macros = macrosFrom100g(food, grams)
     setBasket(prev => [...prev, {
       id:       crypto.randomUUID(),
       foodId:   null,
       foodName: food.nickname,
-      unit:     `${grams}g`,
+      unit:     serving.unit === 'gram' ? `${grams}g` : `${serving.qty} ${getUnitLabel(serving.unit)}`,
       qty:      1,
-      kcal:     Math.round(food.kcal100     * r),
-      protein:  Math.round(food.protein100  * r * 10) / 10,
-      carbs:    Math.round(food.carbs100    * r * 10) / 10,
-      fat:      Math.round(food.fat100      * r * 10) / 10,
-      fiber:    Math.round((food.fiber100 || 0) * r * 10) / 10,
-      sugar:    Math.round((food.sugar100 || 0) * r * 10) / 10,
+      ...macros,
     }])
   }
 
   function handleStartEdit(food) {
     setEditingFoodId(food.id)
     setEditFields({
-      nickname:    food.nickname,
+      nickname:     food.nickname,
+      defaultUnit:  food.defaultUnit || 'gram',
       defaultGrams: String(food.defaultGrams || 100),
-      kcal100:     String(food.kcal100),
-      protein100:  String(food.protein100),
-      carbs100:    String(food.carbs100),
-      fat100:      String(food.fat100),
-      fiber100:    String(food.fiber100 || 0),
-      sugar100:    String(food.sugar100 || 0),
+      kcal100:      String(food.kcal100),
+      protein100:   String(food.protein100),
+      carbs100:     String(food.carbs100),
+      fat100:       String(food.fat100),
+      fiber100:     String(food.fiber100 || 0),
+      sugar100:     String(food.sugar100 || 0),
     })
   }
 
   async function handleEditSave(foodId) {
     if (!editFields.nickname?.trim()) return
+    const defaultUnit = editFields.defaultUnit || 'gram'
     const updates = {
       nickname:     editFields.nickname.trim(),
+      defaultUnit,
       defaultGrams: Math.max(1, Number(editFields.defaultGrams) || 100),
       kcal100:      Math.max(0, Number(editFields.kcal100)     || 0),
       protein100:   Math.max(0, Number(editFields.protein100)  || 0),
@@ -337,11 +418,9 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       fiber100:     Math.max(0, Number(editFields.fiber100)    || 0),
       sugar100:     Math.max(0, Number(editFields.sugar100)    || 0),
     }
-    // Optimistic update
     setSavedFoods(prev => prev.map(f => f.id !== foodId ? f : { ...f, ...updates }))
     setEditingFoodId(null)
     setEditFields({})
-    // Persist
     if (userId) {
       await supabase.from('saved_foods').update({
         nickname:       updates.nickname,
@@ -351,26 +430,27 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         fat:            updates.fat100,
         fiber:          updates.fiber100,
         sugar:          updates.sugar100,
+        default_unit:   updates.defaultUnit,
         default_weight: updates.defaultGrams,
       }).eq('id', foodId).eq('user_id', userId)
     }
   }
 
   function addSavedFoodToBasket(food) {
-    const grams = Math.max(1, Number(savedFoodGrams[food.id]) || 100)
-    const r = grams / 100
+    const serving = getSavedServing(food)
+    if (!isServingValid(serving.unit, serving.qty, serving.gramsPerUnit)) {
+      setError(serving.unit === 'gram' ? 'Geçerli bir miktar girin.' : `"1 ${getUnitLabel(serving.unit)} kaç gram?" alanını doldurun.`)
+      return
+    }
+    const grams = calcTotalGrams(serving.unit, serving.qty, serving.gramsPerUnit)
+    const macros = macrosFrom100g(food, grams)
     setBasket(prev => [...prev, {
       id:       crypto.randomUUID(),
       foodId:   null,
       foodName: food.nickname,
-      unit:     `${grams}g`,
+      unit:     serving.unit === 'gram' ? `${grams}g` : `${serving.qty} ${getUnitLabel(serving.unit)}`,
       qty:      1,
-      kcal:     Math.round(food.kcal100     * r),
-      protein:  Math.round(food.protein100  * r * 10) / 10,
-      carbs:    Math.round(food.carbs100    * r * 10) / 10,
-      fat:      Math.round(food.fat100      * r * 10) / 10,
-      fiber:    Math.round(food.fiber100    * r * 10) / 10,
-      sugar:    Math.round(food.sugar100    * r * 10) / 10,
+      ...macros,
     }])
   }
 
@@ -532,12 +612,12 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setMName(''); setMKcal(''); setMProt(''); setMCarb(''); setMFat('')
     setMFib(''); setMSug(''); setError('')
     setScannerOpen(false); setBarcodeOpen(false); setBarcodeInput(''); setBarcodeLoading(false)
-    setBarcodeError(''); setBarcodeProduct(null); setBarcodeGrams('100'); setBarcodeUnit('gram')
-    setBarcodePackageGrams(null); setBarcodeUnknown(false)
+    setBarcodeError(''); setBarcodeProduct(null); setBarcodeQty('100'); setBarcodeUnit('gram')
+    setBarcodeGramsPerUnit(''); setBarcodePackageGrams(null); setBarcodeUnknown(false)
     setUnknownName(''); setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
     setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
-    setUnknownUnit('gram'); setUnknownGrams('100')
-    setShowSaveForm(false); setSaveNickname(''); setSavedFoodGrams({})
+    setUnknownUnit('gram'); setUnknownQty('100'); setUnknownGramsPerUnit('')
+    setShowSaveForm(false); setSaveNickname(''); setSavedFoodServing({})
     setEditingFoodId(null); setEditFields({})
     setAiText(''); setAiLoading(false); setAiResults([]); setAiError('')
     setAiGrams({}); setAiSaveIdx(null); setAiSaveName('')
@@ -757,11 +837,13 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                       <div>
                         <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Porsiyon Büyüklüğü</p>
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {DEFAULT_BARCODE_UNITS.filter(u => u.grams !== null).map(u => (
+                          {SERVING_UNITS.map(u => (
                             <button key={u.id} type="button"
                               onClick={() => {
                                 setUnknownUnit(u.id)
-                                if (u.grams) setUnknownGrams(String(u.grams))
+                                setUnknownGramsPerUnit('')
+                                if (u.id === 'gram') setUnknownQty('100')
+                                else setUnknownQty('1')
                               }}
                               className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
                                 unknownUnit === u.id
@@ -772,20 +854,44 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                             </button>
                           ))}
                         </div>
+                        {unknownUnit !== 'gram' && (
+                          <div className="mb-2">
+                            <label className="mb-1 block text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                              1 {getUnitLabel(unknownUnit)} kaç gram? *
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number" inputMode="decimal" min="0.1" step="0.1" required
+                                value={unknownGramsPerUnit}
+                                onChange={e => { setUnknownGramsPerUnit(e.target.value); setError('') }}
+                                placeholder="örn. 30"
+                                className="w-24 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-amber-500"
+                              />
+                              <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
                           <input
-                            type="number" inputMode="numeric" min="1"
-                            value={unknownGrams}
-                            onChange={e => { setUnknownGrams(e.target.value); setUnknownUnit('gram') }}
+                            type="number" inputMode="decimal" min="0.1" step="0.5"
+                            value={unknownQty}
+                            onChange={e => { setUnknownQty(e.target.value); setError('') }}
                             className="w-20 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-amber-400"
                           />
-                          <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            {unknownUnit === 'gram' ? 'gram' : getUnitLabel(unknownUnit)}
+                          </span>
+                          {isServingValid(unknownUnit, unknownQty, unknownGramsPerUnit) && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                              ≈ {calcTotalGrams(unknownUnit, unknownQty, unknownGramsPerUnit)}g
+                            </span>
+                          )}
                           <button type="button" onClick={addUnknownToBasket}
                             className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-amber-600 active:scale-95">
                             <PlusIcon />
                             Sepete Ekle
-                            {unknownKcal100 && Number(unknownKcal100) > 0
-                              ? ` · ${Math.round(Number(unknownKcal100) * (Math.max(1, Number(unknownGrams) || 100) / 100))} kcal`
+                            {unknownKcal100 && isServingValid(unknownUnit, unknownQty, unknownGramsPerUnit) && Number(unknownKcal100) > 0
+                              ? ` · ${macrosFrom100g({ kcal100: Number(unknownKcal100), protein100: 0, carbs100: 0, fat100: 0 }, calcTotalGrams(unknownUnit, unknownQty, unknownGramsPerUnit)).kcal} kcal`
                               : ''}
                           </button>
                         </div>
@@ -829,28 +935,33 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                           <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5">
                             <span className="text-sm">📦</span>
                             <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                              Gerçek paket ağırlığı bulundu: <span className="font-extrabold">{barcodePackageGrams}g</span> — otomatik seçildi.
+                              Paket ağırlığı: <span className="font-extrabold">{barcodePackageGrams}g</span>
                             </p>
                           </div>
                         )}
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {/* Dynamic "Paket" chip shown only when real package weight was found */}
                           {barcodePackageGrams && (
                             <button type="button"
-                              onClick={() => { setBarcodeUnit('paket'); setBarcodeGrams(String(barcodePackageGrams)) }}
+                              onClick={() => {
+                                setBarcodeUnit('paket')
+                                setBarcodeGramsPerUnit(String(barcodePackageGrams))
+                                setBarcodeQty('1')
+                              }}
                               className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
                                 barcodeUnit === 'paket'
                                   ? 'bg-emerald-500 text-white shadow-sm ring-2 ring-emerald-300'
                                   : 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100'
                               }`}>
-                              📦 Paket ({barcodePackageGrams}g)
+                              📦 Paket
                             </button>
                           )}
-                          {DEFAULT_BARCODE_UNITS.filter(u => u.grams !== null).map(u => (
+                          {SERVING_UNITS.map(u => (
                             <button key={u.id} type="button"
                               onClick={() => {
                                 setBarcodeUnit(u.id)
-                                if (u.grams) setBarcodeGrams(String(u.grams))
+                                setBarcodeGramsPerUnit('')
+                                if (u.id === 'gram') setBarcodeQty('100')
+                                else setBarcodeQty('1')
                               }}
                               className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
                                 barcodeUnit === u.id
@@ -861,16 +972,43 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                             </button>
                           ))}
                         </div>
+                        {barcodeUnit !== 'gram' && (
+                          <div className="mb-2">
+                            <label className="mb-1 block text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                              1 {barcodeUnit === 'paket' ? 'Paket' : getUnitLabel(barcodeUnit)} kaç gram? *
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number" inputMode="decimal" min="0.1" step="0.1" required
+                                value={barcodeGramsPerUnit}
+                                onChange={e => { setBarcodeGramsPerUnit(e.target.value); setError('') }}
+                                placeholder="örn. 30"
+                                className="w-24 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-500"
+                              />
+                              <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
-                          <input type="number" inputMode="numeric" min="1"
-                            value={barcodeGrams}
-                            onChange={e => { setBarcodeGrams(e.target.value); setBarcodeUnit('gram') }}
+                          <input type="number" inputMode="decimal" min="0.1" step="0.5"
+                            value={barcodeQty}
+                            onChange={e => { setBarcodeQty(e.target.value); setError('') }}
                             className="w-20 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400" />
-                          <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            {barcodeUnit === 'gram' ? 'gram' : barcodeUnit === 'paket' ? 'Paket' : getUnitLabel(barcodeUnit)}
+                          </span>
+                          {isServingValid(barcodeUnit, barcodeQty, barcodeGramsPerUnit) && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                              ≈ {calcTotalGrams(barcodeUnit, barcodeQty, barcodeGramsPerUnit)}g
+                            </span>
+                          )}
                           <button type="button" onClick={addBarcodeToBasket}
                             className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95">
                             <PlusIcon />
-                            Sepete Ekle · {Math.round(barcodeProduct.kcal100 * (Math.max(1, Number(barcodeGrams) || 100) / 100))} kcal
+                            Sepete Ekle
+                            {isServingValid(barcodeUnit, barcodeQty, barcodeGramsPerUnit)
+                              ? ` · ${macrosFrom100g(barcodeProduct, calcTotalGrams(barcodeUnit, barcodeQty, barcodeGramsPerUnit)).kcal} kcal`
+                              : ''}
                           </button>
                         </div>
                       </div>
@@ -1108,11 +1246,17 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                   </p>
                 </div>
               ) : savedFoods.map(food => {
-                const defaultG = food.defaultGrams || 100
-                const grams    = Math.max(1, Number(savedFoodGrams[food.id] ?? defaultG))
-                const r        = grams / 100
+                const serving = getSavedServing(food)
+                const totalGrams = isServingValid(serving.unit, serving.qty, serving.gramsPerUnit)
+                  ? calcTotalGrams(serving.unit, serving.qty, serving.gramsPerUnit)
+                  : 0
+                const r = totalGrams / 100
                 const totalKcal = Math.round(food.kcal100 * r)
-                const quickKcal = Math.round(food.kcal100 * (defaultG / 100))
+                const quickServing = getSavedServing(food)
+                const quickGrams = isServingValid(quickServing.unit, quickServing.qty, quickServing.gramsPerUnit)
+                  ? calcTotalGrams(quickServing.unit, quickServing.qty, quickServing.gramsPerUnit)
+                  : food.defaultGrams || 100
+                const quickKcal = Math.round(food.kcal100 * (quickGrams / 100))
                 const isEditing = editingFoodId === food.id
 
                 return (
@@ -1166,8 +1310,20 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                           placeholder="Takma ad"
                           className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-amber-500"
                         />
-                        <div className="flex items-center gap-2">
-                          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Varsayılan porsiyon:</label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Varsayılan birim:</label>
+                          <select
+                            value={editFields.defaultUnit || 'gram'}
+                            onChange={e => setEditFields(f => ({ ...f, defaultUnit: e.target.value }))}
+                            className="rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-amber-500"
+                          >
+                            {SERVING_UNITS.map(u => (
+                              <option key={u.id} value={u.id}>{u.label}</option>
+                            ))}
+                          </select>
+                          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                            {editFields.defaultUnit === 'gram' ? 'Gram:' : `1 ${getUnitLabel(editFields.defaultUnit || 'gram')} =`}
+                          </label>
                           <input type="number" inputMode="numeric" min="1"
                             value={editFields.defaultGrams || ''}
                             onChange={e => setEditFields(f => ({ ...f, defaultGrams: e.target.value }))}
@@ -1236,35 +1392,65 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                         </svg>
                         Hızlı Ekle
                         <span className="rounded-full bg-emerald-400/40 px-2 py-0.5 text-[9px] font-extrabold">
-                          {defaultG}g · {quickKcal} kcal
+                          {quickGrams}g · {quickKcal} kcal
                         </span>
                       </button>
                     )}
 
-                    {/* ── Custom gram input + add ── */}
+                    {/* ── Unit selector + custom gram input ── */}
                     {!isEditing && (
-                      <div className="flex items-center gap-2">
-                        {food.defaultGrams && food.defaultGrams !== 100 && (
-                          <button type="button"
-                            onClick={() => setSavedFoodGrams(prev => ({ ...prev, [food.id]: String(food.defaultGrams) }))}
-                            className="cursor-pointer rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-2 py-1 text-[9px] font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-colors flex-shrink-0">
-                            {food.defaultGrams}g
-                          </button>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-1">
+                          {SERVING_UNITS.map(u => (
+                            <button key={u.id} type="button"
+                              onClick={() => updateSavedServing(food, {
+                                unit: u.id,
+                                gramsPerUnit: u.id === 'gram'
+                                  ? ''
+                                  : (u.id === food.defaultUnit ? String(food.defaultGrams || '') : ''),
+                                qty: u.id === 'gram' ? String(food.defaultGrams || 100) : '1',
+                              })}
+                              className={`cursor-pointer rounded-lg px-2 py-1 text-[9px] font-bold transition-all ${
+                                serving.unit === u.id
+                                  ? 'bg-emerald-500 text-white shadow-sm'
+                                  : 'bg-slate-100 dark:bg-night-muted text-slate-600 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                              }`}>
+                              {u.label}
+                            </button>
+                          ))}
+                        </div>
+                        {serving.unit !== 'gram' && (
+                          <div>
+                            <label className="mb-1 block text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                              1 {getUnitLabel(serving.unit)} kaç gram? *
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input type="number" inputMode="decimal" min="0.1" step="0.1" required
+                                value={serving.gramsPerUnit}
+                                onChange={e => updateSavedServing(food, { gramsPerUnit: e.target.value })}
+                                placeholder={String(food.defaultGrams || '')}
+                                className="w-20 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400"
+                              />
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500">gram</span>
+                            </div>
+                          </div>
                         )}
-                        <button type="button"
-                          onClick={() => setSavedFoodGrams(prev => ({ ...prev, [food.id]: '100' }))}
-                          className="cursor-pointer rounded-lg bg-slate-100 dark:bg-night-muted px-2 py-1 text-[9px] font-bold text-slate-600 dark:text-slate-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 transition-colors flex-shrink-0">
-                          100g
-                        </button>
-                        <input type="number" inputMode="numeric" min="1"
-                          value={savedFoodGrams[food.id] ?? defaultG}
-                          onChange={e => setSavedFoodGrams(prev => ({ ...prev, [food.id]: e.target.value }))}
-                          className="w-14 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400" />
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500">g</span>
-                        <button type="button" onClick={() => addSavedFoodToBasket(food)}
-                          className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-300 dark:border-emerald-700 py-1.5 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 transition-all hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-95">
-                          <PlusIcon /> {totalKcal} kcal ekle
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <input type="number" inputMode="decimal" min="0.1" step="0.5"
+                            value={serving.qty}
+                            onChange={e => updateSavedServing(food, { qty: e.target.value })}
+                            className="w-14 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-2 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400" />
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                            {serving.unit === 'gram' ? 'gram' : getUnitLabel(serving.unit)}
+                          </span>
+                          {totalGrams > 0 && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">≈ {totalGrams}g</span>
+                          )}
+                          <button type="button" onClick={() => addSavedFoodToBasket(food)}
+                            className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-300 dark:border-emerald-700 py-1.5 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 transition-all hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-95">
+                            <PlusIcon /> {totalKcal > 0 ? `${totalKcal} kcal ekle` : 'Sepete Ekle'}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 
 const SCANNER_ID = 'kalorimetre-barcode-scanner'
+const VIEWFINDER_HEIGHT = 150
+
 const BARCODE_FORMATS = [
   Html5QrcodeSupportedFormats.EAN_13,
   Html5QrcodeSupportedFormats.EAN_8,
@@ -9,6 +11,11 @@ const BARCODE_FORMATS = [
   Html5QrcodeSupportedFormats.UPC_E,
   Html5QrcodeSupportedFormats.CODE_128,
 ]
+
+const CAMERA_CONFIG = {
+  facingMode: 'environment',
+  advanced: [{ focusMode: 'continuous' }],
+}
 
 function mapCameraError(err) {
   const msg = String(err?.message || err?.name || err || '').toLowerCase()
@@ -50,20 +57,21 @@ export default function BarcodeScanner({ onScan, onClose }) {
       html5QrCode = new Html5Qrcode(SCANNER_ID, {
         formatsToSupport: BARCODE_FORMATS,
         verbose: false,
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
       })
       scannerRef.current = html5QrCode
 
       try {
         await html5QrCode.start(
-          { facingMode: 'environment' },
+          CAMERA_CONFIG,
           {
             fps: 12,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const width = Math.min(viewfinderWidth * 0.85, 320)
-              const height = Math.min(viewfinderHeight * 0.35, 140)
-              return { width, height }
-            },
+            qrbox: (viewfinderWidth) => ({
+              width: Math.round(viewfinderWidth * 0.8),
+              height: VIEWFINDER_HEIGHT,
+            }),
             aspectRatio: 1.777,
+            disableFlip: true,
           },
           (decodedText) => {
             if (scannedRef.current) return
@@ -97,23 +105,23 @@ export default function BarcodeScanner({ onScan, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-black/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex flex-col bg-black"
       role="dialog"
       aria-modal="true"
       aria-label="Barkod tarayıcı"
     >
       {/* Header */}
-      <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3">
+      <div className="relative z-10 flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3">
         <div>
           <h3 className="text-base font-extrabold text-white">Barkod Okut</h3>
           <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-            EAN / UPC barkodu kameraya hizalayın
+            EAN / UPC barkodunu çerçeveye hizalayın
           </p>
         </div>
         <button
           type="button"
           onClick={handleClose}
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-95"
           aria-label="Kapat"
         >
           <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -123,25 +131,36 @@ export default function BarcodeScanner({ onScan, onClose }) {
       </div>
 
       {/* Scanner viewport */}
-      <div className="relative mx-5 flex-1 overflow-hidden rounded-2xl border border-emerald-500/30 bg-night-card shadow-2xl shadow-emerald-900/20">
-        <div id={SCANNER_ID} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
+      <div className="relative mx-4 flex-1 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+        <div
+          id={SCANNER_ID}
+          className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover [&_#qr-shaded-region]:hidden"
+        />
 
-        {/* Scan frame overlay */}
+        {/* Custom scan mask — 80% × 150px rectangular viewfinder */}
         {ready && !error && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="relative h-28 w-[85%] max-w-xs rounded-xl border-2 border-emerald-400/80 shadow-[0_0_24px_rgba(16,185,129,0.35)]">
-              <span className="absolute -top-1 -left-1 h-5 w-5 rounded-tl-lg border-t-4 border-l-4 border-emerald-400" />
-              <span className="absolute -top-1 -right-1 h-5 w-5 rounded-tr-lg border-t-4 border-r-4 border-emerald-400" />
-              <span className="absolute -bottom-1 -left-1 h-5 w-5 rounded-bl-lg border-b-4 border-l-4 border-emerald-400" />
-              <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-br-lg border-b-4 border-r-4 border-emerald-400" />
-              <div className="absolute inset-x-4 top-1/2 h-0.5 -translate-y-1/2 animate-pulse bg-emerald-400/70" />
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col">
+            <div className="flex-1 bg-black/72" />
+            <div className="flex flex-shrink-0" style={{ height: VIEWFINDER_HEIGHT }}>
+              <div className="w-[10%] bg-black/72" />
+              <div className="relative w-[80%]">
+                {/* Corner brackets */}
+                <span className="absolute left-0 top-0 h-4 w-4 border-l-[3px] border-t-[3px] border-emerald-400" />
+                <span className="absolute right-0 top-0 h-4 w-4 border-r-[3px] border-t-[3px] border-emerald-400" />
+                <span className="absolute bottom-0 left-0 h-4 w-4 border-b-[3px] border-l-[3px] border-emerald-400" />
+                <span className="absolute bottom-0 right-0 h-4 w-4 border-b-[3px] border-r-[3px] border-emerald-400" />
+                {/* Scan line */}
+                <div className="absolute inset-x-2 top-0 h-0.5 animate-[scan_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+              </div>
+              <div className="w-[10%] bg-black/72" />
             </div>
+            <div className="flex-1 bg-black/72" />
           </div>
         )}
 
         {/* Loading state */}
         {!ready && !error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-night-card">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black">
             <svg className="h-8 w-8 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -152,7 +171,7 @@ export default function BarcodeScanner({ onScan, onClose }) {
 
         {/* Error state */}
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-night-card px-6 text-center">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black px-6 text-center">
             <span className="text-4xl leading-none">📷</span>
             <p className="text-sm font-bold text-red-400">{error}</p>
             <button
@@ -167,18 +186,27 @@ export default function BarcodeScanner({ onScan, onClose }) {
       </div>
 
       {/* Footer hint + cancel */}
-      <div className="flex-shrink-0 space-y-3 px-5 py-5 pb-8">
-        <p className="text-center text-[11px] font-medium text-slate-500">
-          Barkod net görünene kadar telefonu sabit tutun
-        </p>
+      <div className="relative z-10 flex-shrink-0 space-y-3 px-5 py-5 pb-8">
+        {ready && !error && (
+          <p className="text-center text-[11px] font-medium text-slate-500">
+            Barkodu çerçeve içine yerleştirin — telefonu ~20 cm uzakta tutun
+          </p>
+        )}
         <button
           type="button"
           onClick={handleClose}
-          className="flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-600 bg-slate-800/80 py-3.5 text-sm font-extrabold text-slate-200 transition-all hover:bg-slate-700 active:scale-[0.98]"
+          className="flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-700 bg-slate-900/90 py-3.5 text-sm font-extrabold text-slate-200 backdrop-blur-sm transition-all hover:bg-slate-800 active:scale-[0.98]"
         >
           Kapat
         </button>
       </div>
+
+      <style>{`
+        @keyframes scan {
+          0%, 100% { top: 8px; opacity: 0.6; }
+          50% { top: calc(100% - 8px); opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
