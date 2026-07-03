@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { DietProvider, useDiet } from './context/DietContext'
+import { DietProvider, useDiet, formatSelectedDateLabel } from './context/DietContext'
 import { CalorieIcon, ProteinIcon, CarbsIcon, FatIcon, FiberIcon, SugarIcon } from './components/Meal/MealIcons'
-import { calcMacros, goalOffsetToId } from './utils/macroEngine'
+import { resolveDashboardTargets } from './utils/macroCalculator'
 import OnboardingWizard from './components/OnboardingWizard'
 import History from './components/History'
 import Profile from './components/Profile'
@@ -421,35 +421,99 @@ function LogItem({ log, onDelete }) {
   )
 }
 
+// ─── Date navigator ───────────────────────────────────────────────────────────
+
+function DateNavigator() {
+  const { selectedDate, isSelectedToday, goToPreviousDay, goToNextDay } = useDiet()
+
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-3 py-2.5 shadow-sm">
+      <button
+        type="button"
+        onClick={goToPreviousDay}
+        aria-label="Önceki gün"
+        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-night-muted hover:text-slate-800 dark:hover:text-slate-200 active:scale-95"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      <div className="min-w-[9rem] flex-1 text-center">
+        <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+          {formatSelectedDateLabel(selectedDate)}
+        </p>
+        {!isSelectedToday && (
+          <p className="mt-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
+            {new Date(`${selectedDate}T12:00:00`).toLocaleDateString('tr-TR', { weekday: 'long' })}
+          </p>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={goToNextDay}
+        disabled={isSelectedToday}
+        aria-label="Sonraki gün"
+        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${
+          isSelectedToday
+            ? 'cursor-not-allowed text-slate-200 dark:text-night-muted'
+            : 'cursor-pointer text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-night-muted hover:text-slate-800 dark:hover:text-slate-200'
+        }`}
+      >
+        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
 // ─── Dashboard view ───────────────────────────────────────────────────────────
 
-function DashboardView({ onAddMeal }) {
-  const { profile, consumed, logs, water, macros, deleteLog, setWater } = useDiet()
+function DashboardView({ onAddMeal, onCompleteProfile }) {
+  const {
+    profile, consumed, logs, water, macros, deleteLog, setWater,
+    selectedDate, isSelectedToday, dayLoading,
+  } = useDiet()
 
-  const baseTDEE  = profile?.tdee || 0
-  const rawTarget = baseTDEE > 0 ? baseTDEE + (profile.goalOffset ?? 0) : 0
-  const target    = rawTarget > 0 ? Math.max(1200, rawTarget) : (Number(profile?.dailyGoal) || 0)
-  const goalId    = profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset)
-  const macroTgt  = macros ?? (target > 0 ? calcMacros(target, goalId) : null) ?? { protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
+  const { target, macroTgt, isBaseline, needsProfile } = useMemo(
+    () => resolveDashboardTargets(profile, macros),
+    [profile, macros],
+  )
   const waterGoal = profile?.waterGoal ?? 8
   const remaining = Math.max(0, target - consumed.kcal)
 
   let aiMessage
-  if (!target) {
-    aiMessage = 'Profilinizi tamamlayın, kalori hedefinizi belirleyelim.'
+  if (needsProfile) {
+    aiMessage = isBaseline
+      ? 'Profilinizi tamamlayın — şu an geçici 2.000 kcal baz hedefi kullanılıyor. Ayarlar\'dan kişisel bilgilerinizi girin.'
+      : 'Profilinizi tamamlayın, kalori hedefinizi Mifflin-St Jeor ile hesaplayalım.'
   } else if (consumed.kcal === 0) {
-    const h = new Date().getHours()
-    const greeting = h < 12 ? 'Günaydın' : h < 18 ? 'İyi öğleden sonra' : 'İyi akşamlar'
-    aiMessage = `${greeting}! Bugün ${target.toLocaleString('tr-TR')} kcal hedefiniz var. İlk öğününüzü ekleyin.`
+    if (isSelectedToday) {
+      const h = new Date().getHours()
+      const greeting = h < 12 ? 'Günaydın' : h < 18 ? 'İyi öğleden sonra' : 'İyi akşamlar'
+      aiMessage = `${greeting}! Bugün ${target.toLocaleString('tr-TR')} kcal hedefiniz var. İlk öğününüzü ekleyin.`
+    } else {
+      aiMessage = 'Bu gün için henüz kayıt yok. Geçmişe öğün ekleyebilirsiniz.'
+    }
   } else if (consumed.kcal > target) {
-    aiMessage = 'Günlük kalori hedefinizi aştınız. Akşam hafif ve protein ağırlıklı beslenmenizi öneririz.'
+    aiMessage = isSelectedToday
+      ? 'Günlük kalori hedefinizi aştınız. Akşam hafif ve protein ağırlıklı beslenmenizi öneririz.'
+      : 'Bu gün kalori hedefinizi aştınız.'
   } else if (remaining < target * 0.2) {
-    aiMessage = `Hedefinize çok yakınsınız! Kalan ${remaining.toLocaleString('tr-TR')} kcal için hafif bir atıştırmalık idealdir.`
+    aiMessage = isSelectedToday
+      ? `Hedefinize çok yakınsınız! Kalan ${remaining.toLocaleString('tr-TR')} kcal için hafif bir atıştırmalık idealdir.`
+      : `Bu gün hedefe çok yaklaşıldı — ${remaining.toLocaleString('tr-TR')} kcal kaldı.`
   } else {
-    aiMessage = `${remaining.toLocaleString('tr-TR')} kcal kaldı. Öğünlerinizi dengelemek için protein ağırlıklı beslenin.`
+    aiMessage = isSelectedToday
+      ? `${remaining.toLocaleString('tr-TR')} kcal kaldı. Öğünlerinizi dengelemek için protein ağırlıklı beslenin.`
+      : `Bu gün ${remaining.toLocaleString('tr-TR')} kcal kaldı.`
   }
 
-  const dateLabel = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })
+  const dateLabel = new Date(`${selectedDate}T12:00:00`).toLocaleDateString('tr-TR', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
 
   return (
     <section className="space-y-4">
@@ -459,6 +523,45 @@ function DashboardView({ onAddMeal }) {
         <p className="text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">{dateLabel}</p>
         <h1 className="mt-0.5 text-2xl font-extrabold text-slate-900 dark:text-slate-100">Ana Panel</h1>
       </header>
+
+      <DateNavigator />
+
+      {dayLoading && (
+        <div className="flex items-center justify-center gap-2 rounded-xl bg-slate-50 dark:bg-night-muted px-3 py-2">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 dark:border-night-border border-t-emerald-500" />
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Gün yükleniyor…</span>
+        </div>
+      )}
+
+      {/* Profile incomplete banner */}
+      {needsProfile && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-900/20 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/40">
+              <svg className="h-5 w-5 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-amber-900 dark:text-amber-300">Profil Tamamlanmadı</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                {isBaseline
+                  ? 'Kişisel hedefleriniz için cinsiyet, yaş, kilo, boy ve aktivite seviyenizi girin. Şimdilik 2.000 kcal baz hedefi kullanılıyor.'
+                  : 'Hedef kalorinizi hesaplamak için eksik profil bilgilerinizi tamamlayın.'}
+              </p>
+              {onCompleteProfile && (
+                <button
+                  type="button"
+                  onClick={onCompleteProfile}
+                  className="mt-2.5 cursor-pointer rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm transition-all hover:bg-amber-600 active:scale-95"
+                >
+                  Profili Tamamla
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI suggestion card */}
       <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-4 shadow-sm">
@@ -504,7 +607,9 @@ function DashboardView({ onAddMeal }) {
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">Hedef</p>
+                <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                  Hedef{isBaseline ? ' (geçici)' : ''}
+                </p>
                 <p className="text-base font-extrabold text-slate-800 dark:text-slate-100">
                   {(target || 0).toLocaleString('tr-TR')}
                 </p>
@@ -788,11 +893,11 @@ function MainApp() {
 
   function renderView() {
     switch (activeTab) {
-      case 'dashboard': return <DashboardView onAddMeal={openAddMeal} />
+      case 'dashboard': return <DashboardView onAddMeal={openAddMeal} onCompleteProfile={() => setActiveTab('settings')} />
       case 'history':   return <History />
       case 'profile':   return <Profile />
       case 'settings':  return <Settings />
-      default:          return <DashboardView onAddMeal={openAddMeal} />
+      default:          return <DashboardView onAddMeal={openAddMeal} onCompleteProfile={() => setActiveTab('settings')} />
     }
   }
 
@@ -915,10 +1020,26 @@ function MainApp() {
   )
 }
 
+// ─── Full-screen loading gate ─────────────────────────────────────────────────
+
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center bg-slate-50 dark:bg-night-bg">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 shadow-xl shadow-emerald-500/30">
+        <svg className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="currentColor">
+          <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.818a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.845-.143z" clipRule="evenodd" />
+        </svg>
+      </div>
+      <div className="mt-6 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 dark:border-night-border border-t-emerald-500" />
+      <p className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">Yükleniyor…</p>
+    </div>
+  )
+}
+
 // ─── App content (requires authenticated session) ────────────────────────────
 
 function AppContent() {
-  const { profile, updateProfile } = useDiet()
+  const { profile, profileLoading, completeOnboarding } = useDiet()
 
   useEffect(() => {
     const theme = profile?.theme ?? 'light'
@@ -933,15 +1054,11 @@ function AppContent() {
     }
   }, [profile?.theme])
 
-  if (profile === undefined) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-white dark:bg-night-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 dark:border-night-border border-t-emerald-500" />
-      </div>
-    )
-  }
+  if (profileLoading) return <LoadingScreen />
 
-  if (profile === null) return <OnboardingWizard onComplete={updateProfile} />
+  if (profile === null) {
+    return <OnboardingWizard onComplete={completeOnboarding} />
+  }
 
   return <MainApp />
 }
@@ -949,40 +1066,36 @@ function AppContent() {
 // ─── Session gate — wraps the entire app ─────────────────────────────────────
 
 function SessionGate() {
-  const [session,     setSession]     = useState(undefined)
+  const [session, setSession] = useState(undefined)
+  const [sessionLoading, setSessionLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null)
+    let mounted = true
+
+    // Restore persisted session from localStorage on cold start / refresh
+    supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
+      if (!mounted) return
+      if (error) console.error('[Auth] getSession hatası:', error)
+      setSession(initialSession ?? null)
+      setSessionLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (!mounted) return
+      console.log('[Auth] onAuthStateChange:', event, newSession?.user?.id ?? 'oturum-yok')
       setSession(newSession ?? null)
+      setSessionLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
-  // Still resolving — show full-screen spinner
-  if (session === undefined) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-slate-900">
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 shadow-xl shadow-emerald-500/30">
-            <svg className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.818a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.845-.143z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-emerald-500" />
-        </div>
-      </div>
-    )
-  }
-
-  // No session — show auth screen
+  if (sessionLoading || session === undefined) return <LoadingScreen />
   if (!session) return <Auth />
 
-  // Authenticated — render main app, scoped to this user's profile
   return (
     <DietProvider userId={session.user.id}>
       <AppContent />

@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import { useDiet } from '../context/DietContext'
+import { macroCalculator } from '../utils/macroCalculator'
+import { GOAL_LABELS } from '../constants/goalOptions'
 
 function ChevronLeft() {
   return (
@@ -71,8 +73,24 @@ export default function OnboardingSonucu({ onClose }) {
   const weight = Number(profile?.stats?.weight || profile?.weight || 0)
   const height = Number(profile?.stats?.height || profile?.height || 0)
 
-  const { bmr, tdee, dailyGoal, macros, goalOffset } = useMemo(() => {
-    // Mifflin-St Jeor BMR
+  const { bmr, tdee, dailyGoal, macros, goalOffset, goalLabel } = useMemo(() => {
+    const computed = macroCalculator(profile)
+    if (computed) {
+      const goalId = profile?.primaryGoal
+      return {
+        bmr:        computed.bmr,
+        tdee:       computed.tdee,
+        dailyGoal:  computed.target_calories,
+        goalOffset: computed.goalOffset ?? (computed.target_calories - computed.tdee),
+        macros: {
+          protein: computed.target_protein,
+          carbs:   computed.target_carbs,
+          fat:     computed.target_fat,
+        },
+        goalLabel: GOAL_LABELS[goalId] ?? 'Kilo Korumak',
+      }
+    }
+
     const bmr = age && weight && height
       ? Math.round(gender === 'kadin'
           ? 10 * weight + 6.25 * height - 5 * age - 161
@@ -80,21 +98,20 @@ export default function OnboardingSonucu({ onClose }) {
       : Number(profile?.tdee) || 0
 
     const tdee = Math.round(bmr * activityInfo.mult)
-
-    const savedGoalOffset = Number(profile?.goalOffset ?? -500)
+    const savedGoalOffset = Number(profile?.goalOffset ?? 0)
     const dailyGoal = Number(profile?.dailyGoal) || Math.max(1200, tdee + savedGoalOffset)
     const goalOffset = dailyGoal - tdee
 
-    const macros = profile?.macros ?? {
-      protein: Math.round(dailyGoal * 0.25 / 4),
-      carbs:   Math.round(dailyGoal * 0.50 / 4),
-      fat:     Math.round(dailyGoal * 0.25 / 9),
+    return {
+      bmr, tdee, dailyGoal, goalOffset,
+      macros: profile?.macros ?? {
+        protein: Math.round(dailyGoal * 0.25 / 4),
+        carbs:   Math.round(dailyGoal * 0.45 / 4),
+        fat:     Math.round(dailyGoal * 0.30 / 9),
+      },
+      goalLabel: goalOffset < 0 ? 'Kilo Vermek' : goalOffset > 0 ? 'Kas Yapmak / Kilo Almak' : 'Kilo Korumak',
     }
-
-    return { bmr, tdee, dailyGoal, macros, goalOffset }
   }, [profile, age, weight, height, gender, activityInfo])
-
-  const goalLabel = goalOffset < 0 ? 'Kilo Vermek' : goalOffset > 0 ? 'Kilo Almak' : 'Dengeli'
   const kcalDiff  = Math.abs(goalOffset)
 
   // Estimate duration: 500 kcal deficit ≈ 0.5 kg/week ≈ 2 kg/month

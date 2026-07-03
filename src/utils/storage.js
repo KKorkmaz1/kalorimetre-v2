@@ -1,7 +1,10 @@
 // ─── Keys & version ──────────────────────────────────────────────────────────
 const LOGS_KEY = 'kalorimetre_user_logs'
+const MEALS_BY_DATE_KEY = 'kalorimetre_meals_by_date'
 const PROFILE_KEY = 'kalorimetre_user_profile'
-const STORAGE_VERSION = 1
+const STORAGE_VERSION = 2
+
+const EMPTY_DAY = { logs: [], water: 0 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function isStorageAvailable() {
@@ -67,10 +70,73 @@ export function clearUserLogs() {
   if (!isStorageAvailable()) return { success: false, error: 'storage_unavailable' }
   try {
     window.localStorage.removeItem(LOGS_KEY)
+    window.localStorage.removeItem(MEALS_BY_DATE_KEY)
     return { success: true }
   } catch {
     return { success: false, error: 'clear_failed' }
   }
+}
+
+// ─── Meals by date ────────────────────────────────────────────────────────────
+
+function createEmptyMealsByDateStore() {
+  return { version: STORAGE_VERSION, mealsByDate: {}, updatedAt: new Date().toISOString() }
+}
+
+function parseMealsByDate(raw) {
+  if (!raw) return createEmptyMealsByDateStore()
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed.mealsByDate !== 'object') return createEmptyMealsByDateStore()
+    return {
+      version: parsed.version ?? STORAGE_VERSION,
+      mealsByDate: parsed.mealsByDate,
+      updatedAt: parsed.updatedAt ?? new Date().toISOString(),
+    }
+  } catch {
+    return createEmptyMealsByDateStore()
+  }
+}
+
+export function getMealsByDate() {
+  if (!isStorageAvailable()) return createEmptyMealsByDateStore()
+  try {
+    return parseMealsByDate(window.localStorage.getItem(MEALS_BY_DATE_KEY))
+  } catch {
+    return createEmptyMealsByDateStore()
+  }
+}
+
+export function saveMealsByDate(mealsByDate) {
+  if (!isStorageAvailable()) return { success: false, error: 'storage_unavailable' }
+  if (!mealsByDate || typeof mealsByDate !== 'object') {
+    return { success: false, error: 'invalid_meals_by_date' }
+  }
+  try {
+    const payload = {
+      version: STORAGE_VERSION,
+      mealsByDate,
+      updatedAt: new Date().toISOString(),
+    }
+    window.localStorage.setItem(MEALS_BY_DATE_KEY, JSON.stringify(payload))
+    return { success: true, data: payload }
+  } catch {
+    return { success: false, error: 'write_failed' }
+  }
+}
+
+export function saveDayMeals(dateStr, dayData) {
+  if (!dateStr) return { success: false, error: 'invalid_date' }
+  const store = getMealsByDate()
+  return saveMealsByDate({
+    ...store.mealsByDate,
+    [dateStr]: dayData ?? EMPTY_DAY,
+  })
+}
+
+export function getDayMeals(dateStr) {
+  const store = getMealsByDate()
+  return store.mealsByDate[dateStr] ?? EMPTY_DAY
 }
 
 // ─── User Profile ─────────────────────────────────────────────────────────────

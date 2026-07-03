@@ -1,25 +1,158 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import {
+  Activity,
+  Armchair,
+  Calendar,
+  CheckCircle,
+  CheckCircle2,
+  CircleDot,
+  Droplets,
+  Dumbbell,
+  Fish,
+  Flame,
+  Footprints,
+  Heart,
+  HeartPulse,
+  Leaf,
+  Milk,
+  Nut,
+  Pill,
+  Rocket,
+  Ruler,
+  Scale,
+  ShieldCheck,
+  Sprout,
+  Syringe,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+  User,
+  UserRound,
+  UtensilsCrossed,
+  Weight,
+  Wheat,
+  Zap,
+} from 'lucide-react'
 import { useDiet } from '../context/DietContext'
 import { ProteinIcon, CarbsIcon, FatIcon } from './Meal/MealIcons'
-import { calcTDEE, calcMacros, GOAL_DELTAS, goalOffsetToId } from '../utils/macroEngine'
+import { GOAL_OPTIONS, GOAL_LABELS, DEFAULT_GOAL } from '../constants/goalOptions'
+import { goalOffsetToId, macroCalculator, migrateLegacyGoal, calculateMacros } from '../utils/macroCalculator'
 import HedefDuzenle from './HedefDuzenle'
 import { supabase } from '../utils/supabaseClient'
 
 // ─── Constants (used by sub-views only) ───────────────────────────────────────
 
 const ACTIVITY_LEVELS = [
-  { id: 'sedentary',  label: 'Hareketsiz',  desc: 'Masa başı iş, az hareket',       mult: 1.2   },
-  { id: 'light',      label: 'Hafif Aktif', desc: 'Haftada 1–3 gün egzersiz',       mult: 1.375 },
-  { id: 'moderate',   label: 'Orta Aktif',  desc: 'Haftada 3–5 gün egzersiz',       mult: 1.55  },
-  { id: 'active',     label: 'Çok Aktif',   desc: 'Haftada 6–7 gün ağır antrenman', mult: 1.725 },
-  { id: 'veryActive', label: 'Sporcu',      desc: 'Günde 2 kez antrenman',          mult: 1.9   },
+  { id: 'sedentary',  label: 'Hareketsiz',  desc: 'Masa başı iş, az hareket',       mult: 1.2,   icon: Armchair   },
+  { id: 'light',      label: 'Hafif Aktif', desc: 'Haftada 1–3 gün egzersiz',       mult: 1.375, icon: Footprints },
+  { id: 'moderate',   label: 'Orta Aktif',  desc: 'Haftada 3–5 gün egzersiz',       mult: 1.55,  icon: Activity   },
+  { id: 'active',     label: 'Çok Aktif',   desc: 'Haftada 6–7 gün ağır antrenman', mult: 1.725, icon: Zap        },
+  { id: 'veryActive', label: 'Ekstra Aktif', desc: 'Günde 2 kez antrenman / sporcu', mult: 1.9,   icon: Trophy     },
 ]
 
-const GOAL_LABELS = {
-  kilo_ver:  'Kilo Vermek',
-  kilo_al:   'Kilo Almak',
-  kas_kazan: 'Kas Kazanmak',
-  dengeli:   'Dengeli',
+const DIET_ICONS = {
+  standart:   UtensilsCrossed,
+  vegan:      Leaf,
+  vejetaryen: Sprout,
+  keto:       Zap,
+  akdeniz:    Fish,
+}
+
+const ALLERGEN_ICONS = {
+  gluten:         Wheat,
+  laktoz:         Milk,
+  kuruyemis:      Nut,
+  deniz_urunleri: Fish,
+  yok:            CheckCircle,
+}
+
+const MEDICAL_ICONS = {
+  yok:             ShieldCheck,
+  insulin_direnci: Droplets,
+  diyabet_tip1:    Syringe,
+  diyabet_tip2:    Syringe,
+  tansiyon:        HeartPulse,
+  kolesterol:      Activity,
+  tiroid:          Pill,
+  pcos:            CircleDot,
+}
+
+const GOAL_ICONS = {
+  'Sağlıklı Beslenmek':    Heart,
+  'Dengeli Kilo Vermek':   TrendingDown,
+  'Hızlı Kilo Vermek':     Rocket,
+  'Dengeli Kilo Almak':    TrendingUp,
+  'Hızlı Kilo Almak':      Scale,
+  'Dengeli Kas Kazanmak':  Dumbbell,
+  'Hızlı Kas Kazanmak':    Flame,
+}
+
+const PROFILE_STAGGER_CONTAINER = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
+}
+
+const PROFILE_SECTION_VARIANT = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] },
+  },
+}
+
+// GOAL_OPTIONS and GOAL_LABELS imported from ../constants/goalOptions.js
+
+const DIET_OPTIONS = [
+  { id: 'standart',   label: 'Standart',   desc: 'Dengeli, karma beslenme' },
+  { id: 'vegan',      label: 'Vegan',      desc: 'Hayvansal ürün yok' },
+  { id: 'vejetaryen', label: 'Vejetaryen', desc: 'Et yok; süt, yumurta serbest' },
+  { id: 'keto',       label: 'Ketojenik',  desc: 'Düşük karbonhidrat, yüksek yağ' },
+  { id: 'akdeniz',    label: 'Akdeniz',    desc: 'Balık, zeytinyağı, baklagil' },
+]
+
+const ALLERGENS = [
+  { id: 'gluten',         label: 'Gluten',           desc: 'Buğday, arpa, çavdar' },
+  { id: 'laktoz',         label: 'Laktoz',            desc: 'Süt ve süt ürünleri' },
+  { id: 'kuruyemis',      label: 'Kuruyemiş',         desc: 'Fındık, badem, ceviz' },
+  { id: 'deniz_urunleri', label: 'Deniz Ürünleri',    desc: 'Balık, karides, midye' },
+  { id: 'yok',            label: 'Alerji / Kısıtım Yok', desc: 'Herhangi bir alerjim yok' },
+]
+
+const MEDICAL_CONDITIONS = [
+  { id: 'yok',             label: 'Yok',             desc: 'Bilinen kronik hastalık yok' },
+  { id: 'insulin_direnci', label: 'İnsülin Direnci', desc: 'Karbonhidrat kontrolü gerektirir' },
+  { id: 'diyabet_tip1',    label: 'Diyabet (Tip 1)', desc: 'İnsüline bağımlı diyabet' },
+  { id: 'diyabet_tip2',    label: 'Diyabet (Tip 2)', desc: 'İnsülin direncine bağlı' },
+  { id: 'tansiyon',        label: 'Tansiyon',        desc: 'Yüksek / düşük kan basıncı' },
+  { id: 'kolesterol',      label: 'Kolesterol',      desc: 'Yüksek kolesterol seviyesi' },
+  { id: 'tiroid',          label: 'Tiroid',          desc: 'Tiroid bezi hastalığı' },
+  { id: 'pcos',            label: 'PCOS',            desc: 'Polikistik over sendromu' },
+]
+
+function deriveHealthConditions(allergies, medicalHistory) {
+  const c = []
+  if (allergies.includes('gluten'))    c.push('colyak')
+  if (allergies.includes('laktoz'))    c.push('laktoz')
+  if (allergies.includes('kuruyemis')) c.push('kuruyemis')
+  if (medicalHistory.includes('diyabet_tip1') || medicalHistory.includes('diyabet_tip2')) c.push('diyabet')
+  if (medicalHistory.includes('insulin_direnci')) c.push('insulin_direnci')
+  if (medicalHistory.includes('pcos')) c.push('pcos')
+  if (medicalHistory.includes('tansiyon')) c.push('tansiyon')
+  if (medicalHistory.includes('kolesterol')) c.push('kolesterol')
+  return c
+}
+
+function getProfileStats(profile) {
+  const stats = profile?.stats ?? {}
+  return {
+    age:      stats.age      ?? profile?.age      ?? '',
+    weight:   stats.weight   ?? profile?.weight   ?? '',
+    height:   stats.height   ?? profile?.height   ?? '',
+    gender:   stats.gender   ?? profile?.gender   ?? 'erkek',
+    activity: stats.activity ?? profile?.activity ?? 'moderate',
+  }
 }
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
@@ -40,27 +173,82 @@ function ChevronRight() {
   )
 }
 
-function SectionLabel({ text }) {
+function SectionLabel({ text, className = '' }) {
   return (
-    <p className="mb-2 text-[11px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+    <p className={`mb-4 text-[11px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500 ${className}`}>
       {text}
     </p>
   )
 }
 
-function StatInput({ label, value, onChange, unit = '', min, step = '1' }) {
+function StatInput({ label, value, onChange, unit = '', min, step = '1', icon: Icon }) {
   return (
-    <div className="rounded-2xl border-2 border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-4 py-3 transition-all focus-within:border-emerald-400 dark:focus-within:border-emerald-500">
-      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">{label}</label>
+    <div className="rounded-2xl border border-transparent bg-gray-50 px-4 py-3.5 shadow-sm transition-all duration-200 focus-within:border-green-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-green-500/20 dark:bg-gray-800 dark:focus-within:bg-night-card">
+      <div className="mb-1.5 flex items-center gap-2">
+        {Icon && (
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 text-green-600 dark:bg-night-muted dark:text-green-400">
+            <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+          </div>
+        )}
+        <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-slate-500">{label}</label>
+      </div>
       <div className="flex items-baseline gap-1.5">
         <input
           type="number" inputMode="decimal" min={min} step={step}
           value={value} onChange={e => onChange(e.target.value)}
-          className="w-full bg-transparent text-2xl font-extrabold text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-200 dark:placeholder:text-night-muted"
+          className="w-full bg-transparent text-2xl font-extrabold text-gray-900 outline-none placeholder:text-gray-300 dark:text-slate-100 dark:placeholder:text-night-muted"
         />
-        {unit && <span className="text-sm font-semibold text-slate-400 dark:text-slate-500">{unit}</span>}
+        {unit && <span className="text-sm font-semibold text-gray-400 dark:text-slate-500">{unit}</span>}
       </div>
     </div>
+  )
+}
+
+const PROFILE_RADIO_GRID = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
+
+function ProfileRadioCard({ selected, onClick, title, description, trailing, icon: Icon, className = '' }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className={`relative flex h-full flex-col justify-between rounded-2xl border p-4 text-left cursor-pointer shadow-sm transition-colors duration-200 hover:border-green-400 hover:shadow-md ${
+        selected
+          ? 'border-2 border-green-500 bg-green-50 dark:bg-green-900/20'
+          : 'border-gray-200 bg-white dark:border-night-border dark:bg-night-card'
+      } ${className}`}
+    >
+      {selected && (
+        <CheckCircle2
+          className="absolute right-3 top-3 h-5 w-5 text-green-500 dark:text-green-400"
+          strokeWidth={2.25}
+          aria-hidden
+        />
+      )}
+      {Icon && (
+        <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+          selected
+            ? 'bg-green-500 text-white shadow-sm shadow-green-500/30'
+            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+        }`}>
+          <Icon className="h-5 w-5" strokeWidth={2} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1 pr-6">
+        <p className={`font-semibold ${selected ? 'text-green-800 dark:text-green-400' : 'text-gray-800 dark:text-white'}`}>
+          {title}
+        </p>
+        {description && (
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>
+        )}
+      </div>
+      {trailing && (
+        <p className={`mt-3 text-sm font-semibold ${selected ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`}>
+          {trailing}
+        </p>
+      )}
+    </motion.button>
   )
 }
 
@@ -113,107 +301,382 @@ function SubViewHeader({ title, onBack, backLabel = 'Ayarlar' }) {
 function ProfilDuzenleView({ onBack }) {
   const { profile, updateProfile } = useDiet()
 
-  const savedGoalId = profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset)
+  const initial = getProfileStats(profile)
+  const savedGoalId = migrateLegacyGoal(
+    profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset) ?? DEFAULT_GOAL,
+  )
 
   const [draft, setDraft] = useState({
-    age:      String(profile?.age    ?? ''),
-    weight:   String(profile?.weight ?? ''),
-    height:   String(profile?.height ?? ''),
-    gender:   profile?.gender   ?? 'erkek',
-    activity: profile?.activity ?? 'moderate',
+    age:            String(initial.age),
+    weight:         String(initial.weight),
+    height:         String(initial.height),
+    gender:         initial.gender,
+    activity:       initial.activity,
+    primaryGoal:    savedGoalId,
+    dietPhilosophy: profile?.dietPhilosophy ?? 'standart',
+    allergies:      profile?.allergies      ?? [],
+    medicalHistory: profile?.medicalHistory ?? [],
   })
   const [saveStatus, setSaveStatus] = useState('idle')
+  const [preview, setPreview] = useState(null)
 
   const set = (k, v) => setDraft(prev => ({ ...prev, [k]: v }))
 
-  const tdee = useMemo(
-    () => calcTDEE(draft.age, draft.weight, draft.height, draft.gender, draft.activity),
-    [draft.age, draft.weight, draft.height, draft.gender, draft.activity],
-  )
+  useEffect(() => {
+    const healthConditions = deriveHealthConditions(draft.allergies, draft.medicalHistory)
+    const result = macroCalculator({
+      stats: {
+        age:      Number(draft.age),
+        weight:   Number(draft.weight),
+        height:   Number(draft.height),
+        gender:   draft.gender,
+        activity: draft.activity,
+      },
+      primaryGoal:      draft.primaryGoal,
+      dietPhilosophy:   draft.dietPhilosophy,
+      medicalHistory:   draft.medicalHistory,
+      healthConditions,
+    }) ?? calculateMacros({
+      stats: {
+        age:      Number(draft.age),
+        weight:   Number(draft.weight),
+        height:   Number(draft.height),
+        gender:   draft.gender,
+        activity: draft.activity,
+      },
+    })
+    setPreview(result)
+  }, [
+    draft.age,
+    draft.weight,
+    draft.height,
+    draft.gender,
+    draft.activity,
+    draft.primaryGoal,
+    draft.dietPhilosophy,
+    draft.medicalHistory,
+    draft.allergies,
+  ])
 
-  const targetKcal = tdee > 0 ? Math.max(1200, tdee + (GOAL_DELTAS[savedGoalId] ?? 0)) : 0
-  const liveMacros = useMemo(() => calcMacros(targetKcal, savedGoalId), [targetKcal, savedGoalId])
+  const tdee       = preview?.tdee ?? 0
+  const targetKcal = preview?.target_calories ?? 0
+  const liveMacros = preview
+    ? {
+        protein: preview.target_protein,
+        carbs:   preview.target_carbs,
+        fat:     preview.target_fat,
+        fiber:   preview.target_fiber,
+        sugar:   preview.target_sugar,
+      }
+    : null
+
+  const initialGoal = migrateLegacyGoal(
+    profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset) ?? DEFAULT_GOAL,
+  )
 
   const hasChanges = (
-    String(draft.age)    !== String(profile?.age    ?? '') ||
-    String(draft.weight) !== String(profile?.weight ?? '') ||
-    String(draft.height) !== String(profile?.height ?? '') ||
-    draft.gender   !== (profile?.gender   ?? 'erkek')     ||
-    draft.activity !== (profile?.activity ?? 'moderate')
+    String(draft.age)            !== String(initial.age)            ||
+    String(draft.weight)         !== String(initial.weight)         ||
+    String(draft.height)         !== String(initial.height)         ||
+    draft.gender                 !== initial.gender                 ||
+    draft.activity               !== initial.activity               ||
+    draft.primaryGoal            !== initialGoal                    ||
+    draft.dietPhilosophy         !== (profile?.dietPhilosophy ?? 'standart') ||
+    JSON.stringify(draft.allergies)      !== JSON.stringify(profile?.allergies      ?? []) ||
+    JSON.stringify(draft.medicalHistory) !== JSON.stringify(profile?.medicalHistory ?? [])
   )
 
-  function handleSave() {
-    updateProfile({
-      ...profile,
+  function toggleAllergen(id) {
+    setDraft(prev => {
+      if (id === 'yok') return { ...prev, allergies: ['yok'] }
+      const next = prev.allergies.filter(a => a !== 'yok')
+      return {
+        ...prev,
+        allergies: next.includes(id) ? next.filter(a => a !== id) : [...next, id],
+      }
+    })
+  }
+
+  function toggleMedical(id) {
+    setDraft(prev => {
+      if (id === 'yok') return { ...prev, medicalHistory: ['yok'] }
+      const next = prev.medicalHistory.filter(m => m !== 'yok')
+      return {
+        ...prev,
+        medicalHistory: next.includes(id) ? next.filter(m => m !== id) : [...next, id],
+      }
+    })
+  }
+
+  function buildComputedFromDraft(overrides = {}) {
+    const merged = { ...draft, ...overrides }
+    const nextStats = {
+      ...(profile?.stats ?? {}),
+      age:      Number(merged.age),
+      weight:   Number(merged.weight),
+      height:   Number(merged.height),
+      gender:   merged.gender,
+      activity: merged.activity,
+    }
+    const healthConditions = deriveHealthConditions(merged.allergies, merged.medicalHistory)
+    return macroCalculator({
+      stats: nextStats,
+      primaryGoal:      merged.primaryGoal,
+      dietPhilosophy:   merged.dietPhilosophy,
+      medicalHistory:   merged.medicalHistory,
+      healthConditions,
+    })
+  }
+
+  async function selectGoal(goalId) {
+    set('primaryGoal', goalId)
+    const computed = buildComputedFromDraft({ primaryGoal: goalId })
+    const nextStats = {
+      ...(profile?.stats ?? {}),
       age:      Number(draft.age),
       weight:   Number(draft.weight),
       height:   Number(draft.height),
       gender:   draft.gender,
       activity: draft.activity,
-      tdee,
-      dailyGoal: targetKcal,
+    }
+    const goalOffset = computed?.tdee
+      ? computed.target_calories - computed.tdee
+      : 0
+    const { macroPercent: _omit, ...profileBase } = profile ?? {}
+    await updateProfile({
+      ...profileBase,
+      stats:          nextStats,
+      age:            nextStats.age,
+      weight:         nextStats.weight,
+      height:         nextStats.height,
+      gender:         draft.gender,
+      activity:       draft.activity,
+      primaryGoal:    goalId,
+      goalOffset,
+      dietPhilosophy: draft.dietPhilosophy,
+      allergies:      draft.allergies,
+      medicalHistory: draft.medicalHistory,
+      healthConditions: deriveHealthConditions(draft.allergies, draft.medicalHistory),
+      tdee:             computed?.tdee ?? null,
+      dailyGoal:        computed?.target_calories ?? null,
+      target_calories:  computed?.target_calories ?? null,
+      target_protein:   computed?.target_protein  ?? null,
+      target_carbs:     computed?.target_carbs    ?? null,
+      target_fat:       computed?.target_fat      ?? null,
+      target_fiber:     computed?.target_fiber    ?? null,
+      target_sugar:     computed?.target_sugar    ?? null,
+      macros: computed
+        ? {
+            protein: computed.target_protein,
+            carbs:   computed.target_carbs,
+            fat:     computed.target_fat,
+            fiber:   computed.target_fiber,
+            sugar:   computed.target_sugar,
+          }
+        : null,
+    })
+  }
+
+  async function handleSave() {
+    const nextStats = {
+      ...(profile?.stats ?? {}),
+      age:      Number(draft.age),
+      weight:   Number(draft.weight),
+      height:   Number(draft.height),
+      gender:   draft.gender,
+      activity: draft.activity,
+    }
+    const healthConditions = deriveHealthConditions(draft.allergies, draft.medicalHistory)
+    const computed = macroCalculator({
+      stats: nextStats,
+      primaryGoal:      draft.primaryGoal,
+      dietPhilosophy:   draft.dietPhilosophy,
+      medicalHistory:   draft.medicalHistory,
+      healthConditions,
+    })
+    const goalOffset = computed?.tdee
+      ? computed.target_calories - computed.tdee
+      : 0
+    const { macroPercent: _omit, ...profileBase } = profile ?? {}
+    await updateProfile({
+      ...profileBase,
+      stats:          nextStats,
+      age:            nextStats.age,
+      weight:         nextStats.weight,
+      height:         nextStats.height,
+      gender:         draft.gender,
+      activity:       draft.activity,
+      primaryGoal:    draft.primaryGoal,
+      goalOffset,
+      dietPhilosophy: draft.dietPhilosophy,
+      allergies:      draft.allergies,
+      medicalHistory: draft.medicalHistory,
+      healthConditions: deriveHealthConditions(draft.allergies, draft.medicalHistory),
+      tdee:             computed?.tdee ?? null,
+      dailyGoal:        computed?.target_calories ?? null,
+      target_calories:  computed?.target_calories ?? null,
+      target_protein:   computed?.target_protein  ?? null,
+      target_carbs:     computed?.target_carbs    ?? null,
+      target_fat:       computed?.target_fat      ?? null,
+      target_fiber:     computed?.target_fiber    ?? null,
+      target_sugar:     computed?.target_sugar    ?? null,
+      macros: computed
+        ? {
+            protein: computed.target_protein,
+            carbs:   computed.target_carbs,
+            fat:     computed.target_fat,
+            fiber:   computed.target_fiber,
+            sugar:   computed.target_sugar,
+          }
+        : null,
     })
     setSaveStatus('saved')
-    setTimeout(() => { setSaveStatus('idle'); onBack() }, 1200)
+    setTimeout(() => { setSaveStatus('idle'); onBack() }, 1500)
   }
 
   return (
     <SubViewContainer>
-      <SubViewHeader title="Profil Bilgileri" onBack={onBack} />
+      <SubViewHeader title="Sağlık Profili" onBack={onBack} />
       <div className="flex-1 overflow-y-auto">
-        <div className="space-y-5 px-4 py-6 pb-16">
+        <motion.div
+          className="mx-auto w-full max-w-5xl space-y-10 px-4 py-6 pb-16 md:px-6"
+          variants={PROFILE_STAGGER_CONTAINER}
+          initial="hidden"
+          animate="visible"
+        >
 
-          {/* Gender */}
-          <div className="grid grid-cols-2 gap-2">
-            {[{ id: 'erkek', label: '♂ Erkek' }, { id: 'kadin', label: '♀ Kadın' }].map(({ id, label }) => (
-              <button key={id} type="button" onClick={() => set('gender', id)}
-                className={`cursor-pointer rounded-2xl py-3 text-sm font-bold transition-all active:scale-95 ${
-                  draft.gender === id
-                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30'
-                    : 'border-2 border-slate-200 dark:border-night-border bg-white dark:bg-night-card text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-night-muted'
-                }`}
-              >{label}</button>
-            ))}
-          </div>
-
-          {/* Age / Height / Weight */}
-          <div className="grid grid-cols-3 gap-3">
-            <StatInput label="Yaş"  value={draft.age}    onChange={v => set('age', v)}    unit="yıl" min="10" />
-            <StatInput label="Boy"  value={draft.height} onChange={v => set('height', v)} unit="cm"  min="100" />
-            <StatInput label="Kilo" value={draft.weight} onChange={v => set('weight', v)} unit="kg"  min="30" step="0.1" />
-          </div>
-
-          {/* Activity Level */}
-          <div>
-            <p className="mb-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              Aktivite Seviyesi
-            </p>
-            <div className="space-y-2">
-              {ACTIVITY_LEVELS.map(lvl => (
-                <button key={lvl.id} type="button" onClick={() => set('activity', lvl.id)}
-                  className={`flex w-full cursor-pointer items-center justify-between rounded-2xl px-4 py-3 transition-all active:scale-[0.99] ${
-                    draft.activity === lvl.id
-                      ? 'border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
-                      : 'border-2 border-transparent bg-white dark:bg-night-card hover:bg-slate-50 dark:hover:bg-night-muted'
+          {/* Temel bilgiler — cinsiyet + ölçüler */}
+          <motion.section variants={PROFILE_SECTION_VARIANT} className="space-y-4">
+            <div className="grid max-w-md grid-cols-2 gap-4">
+              {[
+                { id: 'erkek', label: 'Erkek', icon: User },
+                { id: 'kadin', label: 'Kadın', icon: UserRound },
+              ].map(({ id, label, icon: GenderIcon }) => (
+                <motion.button
+                  key={id}
+                  type="button"
+                  onClick={() => set('gender', id)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={`relative flex flex-col items-center gap-2 rounded-2xl border p-4 shadow-sm transition-colors duration-200 hover:border-green-400 hover:shadow-md ${
+                    draft.gender === id
+                      ? 'border-2 border-green-500 bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                      : 'border-gray-200 bg-white text-gray-800 dark:border-night-border dark:bg-night-card dark:text-white'
                   }`}
                 >
-                  <div className="text-left">
-                    <p className={`text-sm font-bold ${draft.activity === lvl.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                      {lvl.label}
-                    </p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">{lvl.desc}</p>
+                  {draft.gender === id && (
+                    <CheckCircle2 className="absolute right-2.5 top-2.5 h-4 w-4 text-green-500 dark:text-green-400" strokeWidth={2.25} />
+                  )}
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                    draft.gender === id
+                      ? 'bg-green-500 text-white'
+                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                  }`}>
+                    <GenderIcon className="h-5 w-5" strokeWidth={2} />
                   </div>
-                  <span className={`text-sm font-extrabold ${draft.activity === lvl.id ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                    ×{lvl.mult}
-                  </span>
-                </button>
+                  <span className="text-sm font-semibold">{label}</span>
+                </motion.button>
               ))}
             </div>
-          </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <StatInput label="Yaş"  value={draft.age}    onChange={v => set('age', v)}    unit="yıl" min="10" icon={Calendar} />
+              <StatInput label="Boy"  value={draft.height} onChange={v => set('height', v)} unit="cm"  min="100" icon={Ruler} />
+              <StatInput label="Kilo" value={draft.weight} onChange={v => set('weight', v)} unit="kg"  min="30" step="0.1" icon={Weight} />
+            </div>
+          </motion.section>
+
+          {/* Activity Level */}
+          <motion.section variants={PROFILE_SECTION_VARIANT}>
+            <SectionLabel text="Aktivite Seviyesi" />
+            <div className={PROFILE_RADIO_GRID}>
+              {ACTIVITY_LEVELS.map(lvl => (
+                <ProfileRadioCard
+                  key={lvl.id}
+                  selected={draft.activity === lvl.id}
+                  onClick={() => set('activity', lvl.id)}
+                  title={lvl.label}
+                  description={lvl.desc}
+                  trailing={`×${lvl.mult}`}
+                  icon={lvl.icon}
+                />
+              ))}
+            </div>
+          </motion.section>
+
+          {/* Primary Goal — Hedefiniz */}
+          <motion.section variants={PROFILE_SECTION_VARIANT}>
+            <SectionLabel text="Hedefiniz" />
+            <div className={PROFILE_RADIO_GRID}>
+              {GOAL_OPTIONS.map(({ id, label, desc, badge }) => (
+                <ProfileRadioCard
+                  key={id}
+                  selected={draft.primaryGoal === id}
+                  onClick={() => selectGoal(id)}
+                  title={label}
+                  description={desc}
+                  trailing={badge}
+                  icon={GOAL_ICONS[id]}
+                />
+              ))}
+            </div>
+          </motion.section>
+
+          {/* Diet Philosophy */}
+          <motion.section variants={PROFILE_SECTION_VARIANT}>
+            <SectionLabel text="Diyet Tercihi" />
+            <div className={PROFILE_RADIO_GRID}>
+              {DIET_OPTIONS.map(({ id, label, desc }) => (
+                <ProfileRadioCard
+                  key={id}
+                  selected={draft.dietPhilosophy === id}
+                  onClick={() => set('dietPhilosophy', id)}
+                  title={label}
+                  description={desc}
+                  icon={DIET_ICONS[id]}
+                />
+              ))}
+            </div>
+          </motion.section>
+
+          {/* Allergies */}
+          <motion.section variants={PROFILE_SECTION_VARIANT}>
+            <SectionLabel text="Alerji ve Dışlamalar" />
+            <div className={PROFILE_RADIO_GRID}>
+              {ALLERGENS.map(({ id, label, desc }) => (
+                <ProfileRadioCard
+                  key={id}
+                  selected={draft.allergies.includes(id)}
+                  onClick={() => toggleAllergen(id)}
+                  title={label}
+                  description={desc}
+                  icon={ALLERGEN_ICONS[id]}
+                  className={id === 'yok' ? 'sm:col-span-2 lg:col-span-3' : ''}
+                />
+              ))}
+            </div>
+          </motion.section>
+
+          {/* Medical history */}
+          <motion.section variants={PROFILE_SECTION_VARIANT}>
+            <SectionLabel text="Tıbbi Geçmiş" />
+            <div className={PROFILE_RADIO_GRID}>
+              {MEDICAL_CONDITIONS.map(({ id, label, desc }) => (
+                <ProfileRadioCard
+                  key={id}
+                  selected={draft.medicalHistory.includes(id)}
+                  onClick={() => toggleMedical(id)}
+                  title={label}
+                  description={desc}
+                  icon={MEDICAL_ICONS[id]}
+                />
+              ))}
+            </div>
+          </motion.section>
 
           {/* Live TDEE preview */}
           {tdee > 0 && (
-            <div className="rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 p-5 text-white shadow-xl shadow-emerald-500/25">
+            <motion.div variants={PROFILE_SECTION_VARIANT} className="rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 p-5 text-white shadow-xl shadow-emerald-500/25">
               <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-100">Canlı Hesaplama</p>
               <div className="mt-3 flex items-end justify-between">
                 <div>
@@ -252,13 +715,19 @@ function ProfilDuzenleView({ onBack }) {
                   </div>
                 </>
               )}
-            </div>
+            </motion.div>
           )}
 
           {/* Save */}
-          <button
+          {saveStatus === 'saved' && (
+            <motion.div variants={PROFILE_SECTION_VARIANT} className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-center">
+              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">✓ Profil güncellendi — TDEE ve hedef kalori kaydedildi.</p>
+            </motion.div>
+          )}
+          <motion.button
+            variants={PROFILE_SECTION_VARIANT}
             type="button" onClick={handleSave}
-            disabled={!hasChanges && saveStatus !== 'saved'}
+            disabled={(!hasChanges && saveStatus !== 'saved') || saveStatus === 'saved'}
             className={`w-full cursor-pointer rounded-3xl py-4 text-sm font-extrabold transition-all active:scale-95 ${
               saveStatus === 'saved'
                 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
@@ -268,9 +737,9 @@ function ProfilDuzenleView({ onBack }) {
             }`}
           >
             {saveStatus === 'saved' ? '✓ Kaydedildi!' : 'Kaydet'}
-          </button>
+          </motion.button>
 
-        </div>
+        </motion.div>
       </div>
     </SubViewContainer>
   )
@@ -383,7 +852,11 @@ export default function Settings() {
   if (view === 'gorunum') return <GorunumAyarlariView onBack={() => setView('menu')} />
 
   const isDark    = profile?.theme === 'dark' || profile?.theme === 'amoled'
-  const goalLabel = GOAL_LABELS[profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset)] ?? 'Dengeli'
+  const stats     = getProfileStats(profile)
+  const goalLabel = GOAL_LABELS[
+    migrateLegacyGoal(profile?.primaryGoal ?? goalOffsetToId(profile?.goalOffset))
+  ] ?? 'Sağlıklı Beslenmek'
+  const dietLabel = DIET_OPTIONS.find(d => d.id === (profile?.dietPhilosophy ?? 'standart'))?.label ?? 'Standart'
 
   const SECTIONS = [
     {
@@ -391,10 +864,10 @@ export default function Settings() {
       rows: [
         {
           id: 'profil',
-          title: 'Profil Bilgilerini Düzenle',
-          subtitle: profile?.age
-            ? `${profile.age} yaş · ${profile.weight} kg · ${profile.height} cm`
-            : 'Yaş, kilo, boy ve aktivite seviyesi',
+          title: 'Sağlık Profili',
+          subtitle: stats.age
+            ? `${stats.weight} kg · ${stats.height} cm · ${goalLabel} · TDEE: ${profile?.tdee ? Number(profile.tdee).toLocaleString('tr-TR') : '—'} kcal`
+            : 'Kilo, boy, hedef, alerji ve sağlık durumu',
           iconBg:    'bg-emerald-50 dark:bg-emerald-900/20',
           iconColor: 'text-emerald-500',
           icon: (

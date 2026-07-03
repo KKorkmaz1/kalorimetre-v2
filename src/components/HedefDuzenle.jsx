@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useDiet } from '../context/DietContext'
+import { getDailyCalorieTarget } from '../utils/macroEngine'
 
 function ChevronLeft() {
   return (
@@ -15,11 +16,7 @@ export default function HedefDuzenle({ onClose, backLabel = 'Ayarlar' }) {
   const { profile, updateProfile, macros: contextMacros } = useDiet()
 
   // Derive system-calculated TDEE goal
-  const systemKcal = useMemo(() => {
-    const tdee = Number(profile?.tdee) || 0
-    if (tdee > 0) return Math.max(1200, tdee + (profile.goalOffset ?? 0))
-    return Number(profile?.dailyGoal) || 2000
-  }, [profile])
+  const systemKcal = useMemo(() => getDailyCalorieTarget(profile) || 2000, [profile])
 
   // Derive current macro percents — priority: saved macroPercent > context macros > fallback
   function inferPcts() {

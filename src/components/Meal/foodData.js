@@ -1,134 +1,9 @@
-// calories/protein/carbs/fat/fiber/sugar = per 100 g
+// calories/protein/carbs/fat/fiber/sugar = per 100 g (internal base)
 // units: { "Label": multiplier }  →  total = food.calories × multiplier × qty
 // tags: dietary/allergen flags used by health engine and alternatives filter
 
-import { SEED_DB } from '../../utils/foodDatabase.js'
-
-const CORE_DB = [
-  {
-    id: 1, name: 'Izgara Köfte',
-    calories: 200, protein: 18, carbs: 2, fat: 14,
-    units: { Gram: 0.01, Adet: 0.35, Porsiyon: 1.5 },
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
-  },
-  {
-    id: 2, name: 'Tavuk Göğsü (Izgara)',
-    calories: 165, protein: 31, carbs: 0, fat: 3.6,
-    units: { Gram: 0.01, Porsiyon: 1.5 },
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
-  },
-  {
-    id: 3, name: 'Yulaf Ezmesi',
-    calories: 389, protein: 16.9, carbs: 66, fat: 6.9,
-    units: { Gram: 0.01, 'Yemek Kaşığı': 0.15, Kase: 0.5 },
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
-  },
-  {
-    id: 4, name: 'Mercimek Çorbası',
-    calories: 56, protein: 3.8, carbs: 8.7, fat: 1.2,
-    units: { Gram: 0.01, Kepçe: 1.0, Kase: 2.5 },
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI', 'Akdeniz'],
-  },
-  {
-    id: 5, name: 'Tam Buğday Ekmek',
-    calories: 247, protein: 13, carbs: 41, fat: 3.4,
-    units: { Gram: 0.01, Dilim: 0.35 },
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
-  },
-  {
-    id: 6, name: 'Haşlanmış Yumurta',
-    calories: 155, protein: 13, carbs: 1.1, fat: 11,
-    units: { Gram: 0.01, Adet: 0.5 },
-    tags: ['Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
-  },
-  {
-    id: 7, name: 'Pirinç Pilavı',
-    calories: 130, protein: 2.7, carbs: 28, fat: 0.3,
-    units: { Gram: 0.01, 'Yemek Kaşığı': 0.15, Porsiyon: 1.5 },
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
-  },
-  {
-    id: 8, name: 'Kuru Fasulye',
-    calories: 140, protein: 9, carbs: 23, fat: 1.5,
-    units: { Gram: 0.01, 'Yemek Kaşığı': 0.15, Porsiyon: 2.0 },
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
-  },
-  {
-    id: 9, name: 'Zeytinyağlı Salata',
-    calories: 80, protein: 1.5, carbs: 4, fat: 7,
-    units: { Gram: 0.01, Kase: 1.5 },
-    tags: ['Vegan', 'Vejetaryen', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
-  },
-  {
-    id: 10, name: 'Tam Yağlı Süt',
-    calories: 61, protein: 3.2, carbs: 4.8, fat: 3.3,
-    units: { Mililitre: 0.01, 'Su Bardağı': 2.0 },
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
-  },
-  {
-    id: 11, name: 'Somon (Izgara)',
-    calories: 208, protein: 20, carbs: 0, fat: 13,
-    units: { Gram: 0.01, Porsiyon: 1.5 },
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Akdeniz', 'Keto', 'Yüksek Protein'],
-  },
-  {
-    id: 12, name: 'Kinoa',
-    calories: 120, protein: 4.4, carbs: 21, fat: 1.9,
-    units: { Gram: 0.01, 'Yemek Kaşığı': 0.15, Kase: 1.5 },
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Düşük GI'],
-  },
-  {
-    id: 13, name: 'Avokado',
-    calories: 160, protein: 2, carbs: 9, fat: 15,
-    units: { Gram: 0.01, Adet: 1.5 },
-    tags: ['Vegan', 'Vejetaryen', 'Keto', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
-  },
-  {
-    id: 14, name: 'Yoğurt (Tam Yağlı)',
-    calories: 61, protein: 3.5, carbs: 4.7, fat: 3.3,
-    units: { Gram: 0.01, Kase: 1.5 },
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
-  },
-  {
-    id: 15, name: 'Nohut (Haşlanmış)',
-    calories: 164, protein: 8.9, carbs: 27, fat: 2.6,
-    units: { Gram: 0.01, 'Yemek Kaşığı': 0.15, Kase: 1.5 },
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI', 'Akdeniz'],
-  },
-  {
-    id: 16, name: 'Badem',
-    calories: 579, protein: 21, carbs: 22, fat: 50,
-    units: { Gram: 0.01, Adet: 0.012 },
-    tags: ['Vegan', 'Vejetaryen', 'Keto', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Yüksek Protein'],
-  },
-  {
-    id: 17, name: 'Ispanak (Çiğ)',
-    calories: 23, protein: 2.9, carbs: 3.6, fat: 0.4,
-    units: { Gram: 0.01, Kase: 0.4 },
-    tags: ['Vegan', 'Vejetaryen', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
-  },
-  {
-    id: 18, name: 'Tatlı Patates',
-    calories: 86, protein: 1.6, carbs: 20, fat: 0.1,
-    units: { Gram: 0.01, Adet: 1.2 },
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
-  },
-  {
-    id: 19, name: 'Lor Peyniri',
-    calories: 98, protein: 11, carbs: 3.4, fat: 4.3,
-    units: { Gram: 0.01, 'Yemek Kaşığı': 0.15 },
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
-  },
-  {
-    id: 20, name: 'Zeytinyağı',
-    calories: 884, protein: 0, carbs: 0, fat: 100, fiber: 0, sugar: 0,
-    units: { Mililitre: 0.01, 'Yemek Kaşığı': 0.15 },
-    tags: ['Vegan', 'Vejetaryen', 'Keto', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
-  },
-]
-
-// Merged database: core items + rich Turkish seed database
-export const FOOD_DB = [...CORE_DB, ...SEED_DB]
+export { FOOD_DB } from '../../utils/foodDatabase.js'
+import { FOOD_DB } from '../../utils/foodDatabase.js'
 
 export const MEAL_TYPES = ['Kahvaltı', 'Öğle', 'Akşam', 'Ara Öğün']
 
@@ -214,6 +89,8 @@ export function checkHealthImpact(basket, profile) {
 // ─── Tag-aware alternative suggestions ───────────────────────────────────────
 
 export function getSuggestedAlternatives(basket, profile) {
+  if (!basket?.length) return []
+
   const usedIds       = basket.map(i => i.foodId)
   const totCarbs      = basket.reduce((s, i) => s + i.carbs, 0)
   const totFat        = basket.reduce((s, i) => s + i.fat,   0)
@@ -250,18 +127,45 @@ export function getSuggestedAlternatives(basket, profile) {
   return pool.slice(0, 2)
 }
 
-export function calcPreview(food, unitName, qty) {
-  if (!food || !unitName || !qty) return null
-  const mult = food.units[unitName]
-  if (!mult) return null
-  const q = Number(qty)
-  if (q <= 0) return null
-  const factor = mult * q
+/** Parse user-entered quantity strings (supports comma decimals). */
+export function parseQuantity(val) {
+  if (val === '' || val === null || val === undefined) return NaN
+  const n = parseFloat(String(val).trim().replace(',', '.'))
+  return Number.isFinite(n) ? n : NaN
+}
+
+export function calcPreview(food, unitName, qty, gramsPerUnit = null) {
+  if (!food || !unitName || qty === '' || qty === null || qty === undefined) return null
+  const q = parseQuantity(qty)
+  if (!Number.isFinite(q) || q <= 0) return null
+
+  const isMassUnit = unitName === 'Gram' || unitName === 'Mililitre'
+  const mult = food.units?.[unitName]
+  let totalGrams
+
+  if (isMassUnit) {
+    totalGrams = q
+  } else if (mult != null && Number.isFinite(mult)) {
+    totalGrams = mult * q * 100
+  } else {
+    const gpu = parseQuantity(gramsPerUnit)
+    if (!Number.isFinite(gpu) || gpu <= 0) return null
+    totalGrams = q * gpu
+  }
+
+  const factor = totalGrams / 100
   return {
     kcal:    Math.round(food.calories * factor),
     protein: Math.round(food.protein  * factor * 10) / 10,
     carbs:   Math.round(food.carbs    * factor * 10) / 10,
     fat:     Math.round(food.fat      * factor * 10) / 10,
-    grams:   Math.round(mult * q * 100),
+    grams:   Math.round(totalGrams),
   }
+}
+
+/** True when unit needs a custom gram-weight input (no built-in multiplier). */
+export function unitNeedsGramInput(unitName, food = null) {
+  if (!unitName || unitName === 'Gram' || unitName === 'Mililitre') return false
+  if (food?.units?.[unitName] != null) return false
+  return true
 }

@@ -1,37 +1,70 @@
 import { CloseIcon, PlusIcon } from './MealIcons'
+import { unitNeedsGramInput } from './foodData'
+import { getServingPreview } from '../../utils/foodDatabase.js'
 
 export default function SearchBar({
   query, setQuery,
   selFood, setSelFood,
   selUnit, setSelUnit,
   qty, setQty,
+  gramsPerUnit, setGramsPerUnit,
+  portionLoading = false,
+  portionAiHint = false,
+  onPortionEstimate,
   results, preview,
+  searchLoading = false,
   onAddToBasket,
   setError,
 }) {
-  function selectFood(food) {
-    setSelFood(food)
-    setSelUnit(Object.keys(food.units)[0])
-    setQty('1')
+  function applyUnitDefaults(food, unit) {
+    setSelUnit(unit)
+    if (unit === 'Gram' || unit === 'Mililitre') {
+      setQty('100')
+      setGramsPerUnit('')
+    } else {
+      setQty('1')
+      const mult = food.units?.[unit]
+      setGramsPerUnit(mult != null ? String(Math.round(mult * 100)) : '')
+    }
     setError('')
+    if (onPortionEstimate && food && unit !== 'Gram' && unit !== 'Mililitre' && food.units?.[unit] == null) {
+      onPortionEstimate(food.name, unit)
+    }
   }
 
+  function selectFood(food) {
+    setSelFood(food)
+    const firstUnit = Object.keys(food.units)[0]
+    applyUnitDefaults(food, firstUnit)
+  }
+
+  function selectUnit(u) {
+    if (!selFood) return
+    applyUnitDefaults(selFood, u)
+  }
+
+  const selServing = selFood ? getServingPreview(selFood) : null
+
   return (
-    <>
+    <div className={selFood ? '' : 'flex min-h-0 flex-1 flex-col gap-3'}>
       {selFood ? (
         <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 p-3">
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Seçilen Gıda</p>
               <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{selFood.name}</p>
-              <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
-                {selFood.calories} kcal · P:{selFood.protein}g K:{selFood.carbs}g Y:{selFood.fat}g{' '}
-                <span className="text-emerald-400 dark:text-emerald-600">/ 100g</span>
-              </p>
+              {selServing && (
+                <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                  1 {selServing.unit}: {selServing.kcal} kcal · P:{selServing.protein}g K:{selServing.carbs}g Y:{selServing.fat}g
+                  {selServing.grams > 0 && (
+                    <span className="text-emerald-400 dark:text-emerald-600"> · ≈{selServing.grams}g</span>
+                  )}
+                </p>
+              )}
             </div>
             <button
               type="button"
-              onClick={() => { setSelFood(null); setSelUnit(''); setError('') }}
+              onClick={() => { setSelFood(null); setSelUnit(''); setGramsPerUnit(''); setError('') }}
               className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-emerald-200 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-300 dark:hover:bg-emerald-900/60">
               <CloseIcon />
             </button>
@@ -40,7 +73,7 @@ export default function SearchBar({
           {/* Unit pills */}
           <div className="mb-2 flex flex-wrap gap-1.5">
             {Object.keys(selFood.units).map(u => (
-              <button key={u} type="button" onClick={() => { setSelUnit(u); setError('') }}
+              <button key={u} type="button" onClick={() => selectUnit(u)}
                 className={`cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
                   selUnit === u
                     ? 'bg-emerald-500 text-white shadow-sm'
@@ -51,16 +84,49 @@ export default function SearchBar({
             ))}
           </div>
 
+          {/* Custom gram weight only when no built-in multiplier */}
+          {unitNeedsGramInput(selUnit, selFood) && (
+            <div className="mb-2">
+              <label className="mb-1 block text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                1 {selUnit} kaç gram? *
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <input
+                    type="text" inputMode="decimal"
+                    disabled={portionLoading}
+                    value={portionLoading ? '' : (gramsPerUnit ?? '')}
+                    onChange={e => { setGramsPerUnit(e.target.value); setError('') }}
+                    placeholder={portionLoading ? 'YZ Hesaplanıyor...' : 'örn. 30'}
+                    className="w-24 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-500 disabled:opacity-70 disabled:cursor-wait dark:disabled:bg-night-muted"
+                  />
+                  {portionLoading && (
+                    <svg className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-emerald-500" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  )}
+                </div>
+                <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
+              </div>
+              {portionAiHint && !portionLoading && (
+                <p className="mt-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                  ✨ YZ ile otomatik hesaplandı
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Quantity input */}
           <div className="flex items-center gap-3 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-night-card px-3 py-2">
             <input
-              type="number" inputMode="decimal" min="0.1" step="0.5"
+              type="text" inputMode="decimal"
               value={qty}
               onChange={e => { setQty(e.target.value); setError('') }}
               className="w-20 bg-transparent text-xl font-extrabold text-slate-900 dark:text-slate-100 outline-none"
             />
             <span className="text-sm text-slate-500 dark:text-slate-400">{selUnit}</span>
-            {preview && preview.grams > 0 && selUnit !== 'Gram' && selUnit !== 'Mililitre' && (
+            {preview && preview.grams > 0 && (
               <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-500">≈ {preview.grams}g</span>
             )}
           </div>
@@ -100,29 +166,38 @@ export default function SearchBar({
             />
           </div>
 
-          <div className="space-y-1.5">
-            {results.map(food => (
-              <button
-                key={food.id} type="button" onClick={() => selectFood(food)}
-                className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 py-3 text-left shadow-sm transition-all hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-[0.98]">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{food.name}</p>
-                  <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                    <span className="font-semibold text-slate-600 dark:text-slate-300">{food.calories} kcal</span>
-                    {' · '}P:{food.protein}g K:{food.carbs}g Y:{food.fat}g{' '}
-                    <span className="text-slate-300 dark:text-slate-600">/ 100g</span>
-                  </p>
-                </div>
-                <div className="flex flex-shrink-0 flex-wrap justify-end gap-1">
-                  {Object.keys(food.units).map(u => (
-                    <span key={u} className="rounded-full bg-slate-100 dark:bg-night-muted px-2 py-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400">{u}</span>
-                  ))}
-                </div>
-              </button>
-            ))}
+          <div className="max-h-[min(320px,45vh)] min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
+            {!searchLoading && results.length === 0 && query.trim() && (
+              <p className="py-4 text-center text-xs font-medium text-slate-400 dark:text-slate-500">
+                Sonuç bulunamadı
+              </p>
+            )}
+            {!searchLoading && results.map(food => {
+              const serving = getServingPreview(food)
+              return (
+                <button
+                  key={food.id} type="button" onClick={() => selectFood(food)}
+                  className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 py-3 text-left shadow-sm transition-all hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-[0.98]">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{food.name}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">
+                        1 {serving.unit}: {serving.kcal} kcal
+                      </span>
+                      {' · '}P:{serving.protein}g K:{serving.carbs}g Y:{serving.fat}g
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 flex-wrap justify-end gap-1">
+                    {Object.keys(food.units).filter(u => u !== 'Gram' && u !== 'Mililitre').slice(0, 3).map(u => (
+                      <span key={u} className="rounded-full bg-slate-100 dark:bg-night-muted px-2 py-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400">{u}</span>
+                    ))}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </>
       )}
-    </>
+    </div>
   )
 }

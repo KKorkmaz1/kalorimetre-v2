@@ -1,26 +1,16 @@
-import { useState, useRef } from 'react'
-import { saveUserProfile } from '../utils/storage'
-import { calcMacros, GOAL_DELTAS } from '../utils/macroEngine'
+import { useState, useRef, useMemo } from 'react'
+import { macroCalculator } from '../utils/macroCalculator'
+import { GOAL_OPTIONS } from '../constants/goalOptions'
+import { supabase } from '../utils/supabaseClient'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ACTIVITY_LEVELS = [
-  { id: 'sedanter',    label: 'Sedanter',      desc: 'Masa başı iş, egzersiz yok' },
-  { id: 'az_aktif',   label: 'Az Aktif',       desc: 'Haftada 1–3 gün hafif egzersiz' },
-  { id: 'orta_aktif', label: 'Orta Aktif',     desc: 'Haftada 3–5 gün orta egzersiz' },
-  { id: 'cok_aktif',  label: 'Çok Aktif',      desc: 'Haftada 6–7 gün yoğun egzersiz' },
-  { id: 'ekstra',     label: 'Ekstra Aktif',   desc: 'Profesyonel spor veya ağır fiziksel iş' },
-]
-
-const ACTIVITY_MULTIPLIERS = {
-  sedanter: 1.2, az_aktif: 1.375, orta_aktif: 1.55, cok_aktif: 1.725, ekstra: 1.9,
-}
-
-const PRIMARY_GOALS = [
-  { id: 'kilo_ver',   label: 'Kilo Vermek',              desc: 'Yağ yakımı için kalori açığı', delta: -500 },
-  { id: 'kilo_al',    label: 'Kilo Almak',               desc: 'Kilo kazanımı için kalori fazlası', delta: +500 },
-  { id: 'kas_kazan',  label: 'Kas Kazanmak',             desc: 'Lean bulk — hafif kalori fazlası', delta: +250 },
-  { id: 'dengeli',    label: 'Sağlıklı / Dengeli Beslenmek', desc: 'İdeal kiloyu koruma, denge', delta: 0 },
+  { id: 'sedanter',    label: 'Hareketsiz',     desc: 'Masa başı iş, egzersiz yok',              mult: 1.2   },
+  { id: 'az_aktif',   label: 'Hafif Aktif',     desc: 'Haftada 1–3 gün hafif egzersiz',           mult: 1.375 },
+  { id: 'orta_aktif', label: 'Orta Aktif',      desc: 'Haftada 3–5 gün orta egzersiz',            mult: 1.55  },
+  { id: 'cok_aktif',  label: 'Çok Aktif',       desc: 'Haftada 6–7 gün yoğun egzersiz',           mult: 1.725 },
+  { id: 'ekstra',     label: 'Ekstra Aktif',    desc: 'Profesyonel spor veya ağır fiziksel iş',   mult: 1.9   },
 ]
 
 const DIET_PHILOSOPHIES = [
@@ -94,7 +84,7 @@ const MOCK_MEALS = [
 
 const STEP_META = [
   { title: 'Temel Bilgiler',      subtitle: 'Kişisel istatistiklerinizi girin' },
-  { title: 'Ana Hedef',           subtitle: 'Beslenme hedefinizi belirleyin' },
+  { title: 'Hedefiniz',           subtitle: 'Beslenme hedefinizi seçin' },
   { title: 'Diyet Felsefesi',     subtitle: 'Beslenme tarzınızı seçin' },
   { title: 'Alerji & Dışlamalar', subtitle: 'Kaçınmanız gereken besinler' },
   { title: 'Tıbbi Geçmiş',        subtitle: 'Sağlık durumunuzu belirtin' },
@@ -104,25 +94,33 @@ const STEP_META = [
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
-function calcTDEE({ gender, age, height, weight, activity }) {
-  const w = parseFloat(weight)
-  const h = parseFloat(height)
-  const a = parseInt(age, 10)
-  if (!w || !h || !a || !gender || !activity) return null
-  const bmr = gender === 'erkek'
-    ? 10 * w + 6.25 * h - 5 * a + 5
-    : 10 * w + 6.25 * h - 5 * a - 161
-  return Math.round(bmr * (ACTIVITY_MULTIPLIERS[activity] ?? 1.2))
-}
-
-// Derive backward-compatible healthConditions from new schema fields
 function deriveHealthConditions(allergies, medicalHistory) {
   const c = []
-  if (allergies.includes('gluten'))                                          c.push('colyak')
-  if (allergies.includes('laktoz'))                                          c.push('laktoz')
-  if (allergies.includes('kuruyemis'))                                       c.push('kuruyemis')
+  if (allergies.includes('gluten'))    c.push('colyak')
+  if (allergies.includes('laktoz'))    c.push('laktoz')
+  if (allergies.includes('kuruyemis')) c.push('kuruyemis')
   if (medicalHistory.includes('diyabet_tip1') || medicalHistory.includes('diyabet_tip2')) c.push('diyabet')
+  if (medicalHistory.includes('insulin_direnci')) c.push('insulin_direnci')
+  if (medicalHistory.includes('pcos')) c.push('pcos')
+  if (medicalHistory.includes('tansiyon')) c.push('tansiyon')
+  if (medicalHistory.includes('kolesterol')) c.push('kolesterol')
   return c
+}
+
+function buildOnboardingProfileInput(stats, primaryGoal, dietPhilosophy, allergies, medicalHistory) {
+  return {
+    stats: {
+      gender:   stats.gender,
+      age:      Number(stats.age),
+      height:   Number(stats.height),
+      weight:   Number(stats.weight),
+      activity: stats.activity,
+    },
+    primaryGoal,
+    dietPhilosophy,
+    medicalHistory,
+    healthConditions: deriveHealthConditions(allergies, medicalHistory),
+  }
 }
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
@@ -239,7 +237,7 @@ function Step1BasicStats({ stats, onChange }) {
       <div>
         <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Hareketlilik Düzeyi</p>
         <div className="space-y-2">
-          {ACTIVITY_LEVELS.map(({ id, label, desc }) => {
+          {ACTIVITY_LEVELS.map(({ id, label, desc, mult }) => {
             const active = stats.activity === id
             return (
               <button
@@ -252,10 +250,13 @@ function Step1BasicStats({ stats, onChange }) {
                 }`}
               >
                 <RadioDot selected={active} />
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className={`text-sm font-semibold ${active ? 'text-emerald-800 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>{label}</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
                 </div>
+                <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  active ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                }`}>×{mult}</span>
               </button>
             )
           })}
@@ -269,41 +270,42 @@ function Step1BasicStats({ stats, onChange }) {
 
 function Step2PrimaryGoal({ selected, onSelect }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-        Hedefinize göre günlük kalori hedefi otomatik ayarlanacaktır.
+        Hedefinize göre günlük kalori ve makro dağılımınız AMDR standartlarına göre otomatik hesaplanır.
       </p>
-      {PRIMARY_GOALS.map(({ id, label, desc, delta }) => {
-        const active = selected === id
-        const sign   = delta > 0 ? '+' : delta < 0 ? '−' : '='
-        const badge  = delta === 0 ? 'İdame' : `${sign}${Math.abs(delta)} kcal`
-        return (
-          <button
-            key={id} type="button"
-            onClick={() => onSelect(id)}
-            className={`flex w-full items-center gap-4 rounded-2xl border-2 px-4 py-4 text-left transition-all ${
-              active
-                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 shadow-sm'
-                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600'
-            }`}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className={`text-sm font-bold ${active ? 'text-emerald-800 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>{label}</p>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                  active ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                }`}>{badge}</span>
-              </div>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{desc}</p>
-            </div>
-            <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-              active ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600'
-            }`}>
-              {active && <CheckIcon className="h-3 w-3 text-white" />}
-            </div>
-          </button>
-        )
-      })}
+
+      {/* Dropdown — compact selection */}
+      <div className="relative">
+        <label htmlFor="onboarding-goal" className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Hedefiniz
+        </label>
+        <select
+          id="onboarding-goal"
+          value={selected}
+          onChange={e => onSelect(e.target.value)}
+          className="w-full cursor-pointer appearance-none rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 px-4 py-3.5 pr-10 text-sm font-bold text-slate-900 dark:text-slate-100 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+        >
+          <option value="" disabled>Hedef seçin…</option>
+          {GOAL_OPTIONS.map(({ id, label }) => (
+            <option key={id} value={id}>{label}</option>
+          ))}
+        </select>
+        <svg className="pointer-events-none absolute right-4 top-[2.6rem] h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        </svg>
+      </div>
+
+      {/* Card preview for selected goal */}
+      {GOAL_OPTIONS.filter(g => g.id === selected).map(({ id, label, desc, badge }) => (
+        <div key={id} className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">{label}</p>
+            <span className="rounded-full bg-emerald-200 dark:bg-emerald-800 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{badge}</span>
+          </div>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{desc}</p>
+        </div>
+      ))}
     </div>
   )
 }
@@ -657,12 +659,17 @@ function Step6OCRUpload({ ocrState, onSimulate }) {
 
 // ─── TDEE Summary Card (shown only at final step) ─────────────────────────────
 
-function TDEESummaryCard({ tdee, stats, primaryGoal }) {
-  if (!tdee) return null
-  const goalObj  = PRIMARY_GOALS.find(g => g.id === primaryGoal)
-  const delta    = GOAL_DELTAS[primaryGoal] ?? 0
-  const adjusted = Math.max(1200, tdee + delta)
-  const macros   = calcMacros(adjusted, primaryGoal) ?? {}
+function TDEESummaryCard({ preview, stats, primaryGoal }) {
+  if (!preview?.target_calories) return null
+  const goalObj = GOAL_OPTIONS.find(g => g.id === primaryGoal)
+  const adjusted = preview.target_calories
+  const macros = {
+    protein: preview.target_protein,
+    carbs:   preview.target_carbs,
+    fat:     preview.target_fat,
+    fiber:   preview.target_fiber,
+    sugar:   preview.target_sugar,
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-xl shadow-emerald-200/40 dark:shadow-emerald-900/40">
@@ -672,8 +679,8 @@ function TDEESummaryCard({ tdee, stats, primaryGoal }) {
           <span className="text-4xl font-extrabold text-white">{adjusted.toLocaleString('tr-TR')}</span>
           <span className="mb-1 text-sm font-medium text-emerald-200">kcal/gün</span>
         </div>
-        {goalObj && delta !== 0 && (
-          <p className="text-xs text-emerald-200">Baz TDEE {tdee.toLocaleString('tr-TR')} · hedef: {goalObj.label}</p>
+        {goalObj && preview.tdee !== adjusted && (
+          <p className="text-xs text-emerald-200">Baz TDEE {preview.tdee.toLocaleString('tr-TR')} · hedef: {goalObj.label}</p>
         )}
         <p className="mt-0.5 text-xs text-emerald-300">Mifflin-St Jeor · {stats.gender === 'erkek' ? 'Erkek' : 'Kadın'} · {stats.age} yaş · {stats.weight} kg · {stats.height} cm</p>
       </div>
@@ -716,9 +723,17 @@ export default function OnboardingWizard({ onComplete }) {
   const [medicalHistory, setMedical]  = useState([])
   const [mode, setMode]               = useState('')
   const [ocrState, setOcrState]       = useState('idle') // 'idle' | 'scanning' | 'success'
+  const [saving, setSaving]           = useState(false)
+  const [saveError, setSaveError]     = useState('')
 
   const totalSteps = mode === 'manual' ? 6 : 7
-  const tdee = calcTDEE(stats)
+  const macroPreview = useMemo(
+    () => macroCalculator(buildOnboardingProfileInput(
+      stats, primaryGoal, dietPhilosophy, allergies, medicalHistory,
+    )),
+    [stats, primaryGoal, dietPhilosophy, allergies, medicalHistory],
+  )
+  const tdee = macroPreview?.tdee ?? null
   const meta = STEP_META[step - 1]
 
   // ── Multi-select toggle helpers ───────────────────────────────────────────
@@ -758,6 +773,7 @@ export default function OnboardingWizard({ onComplete }) {
 
   // ── Navigation ────────────────────────────────────────────────────────────
   function handleNext() {
+    if (saving) return
     if (step === 6 && mode === 'manual') { finish(); return }
     if (step === totalSteps)             { finish(); return }
     setStep(s => s + 1)
@@ -774,25 +790,66 @@ export default function OnboardingWizard({ onComplete }) {
   }
 
   // ── Complete & save ───────────────────────────────────────────────────────
-  function finish() {
-    const delta        = GOAL_DELTAS[primaryGoal] ?? 0
-    const adjustedTdee = tdee ? Math.max(1200, tdee + delta) : null
+  async function finish() {
+    const computed = macroCalculator(buildOnboardingProfileInput(
+      stats, primaryGoal, dietPhilosophy, allergies, medicalHistory,
+    ))
+    const goalOffset = computed?.tdee
+      ? computed.target_calories - computed.tdee
+      : 0
     const profile = {
       stats,
       primaryGoal,
-      goalOffset: delta,
-      dailyGoal:  adjustedTdee ?? null,
+      goalOffset,
+      dailyGoal:        computed?.target_calories ?? null,
       dietPhilosophy,
       allergies,
       medicalHistory,
       healthConditions: deriveHealthConditions(allergies, medicalHistory),
       mode,
-      tdee: adjustedTdee ?? null,
-      macros: adjustedTdee ? calcMacros(adjustedTdee, primaryGoal) : null,
+      tdee:             computed?.tdee ?? null,
+      target_calories:  computed?.target_calories ?? null,
+      target_protein:   computed?.target_protein  ?? null,
+      target_carbs:     computed?.target_carbs    ?? null,
+      target_fat:       computed?.target_fat      ?? null,
+      target_fiber:     computed?.target_fiber    ?? null,
+      target_sugar:     computed?.target_sugar    ?? null,
+      macros: computed
+        ? {
+            protein: computed.target_protein,
+            carbs:   computed.target_carbs,
+            fat:     computed.target_fat,
+            fiber:   computed.target_fiber,
+            sugar:   computed.target_sugar,
+          }
+        : null,
       dietPlan: ocrState === 'success' ? MOCK_MEALS : null,
     }
-    saveUserProfile(profile)
-    onComplete(profile)
+
+    setSaving(true)
+    setSaveError('')
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      console.log('CURRENT SESSION:', session)
+
+      if (sessionError) throw sessionError
+
+      if (!session || !session.user?.id) {
+        await supabase.auth.signOut()
+        throw new Error('Oturumunuz bulunamadı. Lütfen giriş sayfasına dönüp tekrar giriş yapın.')
+      }
+
+      await onComplete({ ...profile, userId: session.user.id })
+    } catch (err) {
+      console.error('SUPABASE SAVE ERROR:', err)
+      const detail = err?.message || err?.details || String(err)
+      setSaveError(
+        detail.startsWith('Oturumunuz')
+          ? detail
+          : `Profil kaydedilemedi: ${detail}`,
+      )
+      setSaving(false)
+    }
   }
 
   const isLastStep   = (step === 6 && mode === 'manual') || step === totalSteps
@@ -862,16 +919,13 @@ export default function OnboardingWizard({ onComplete }) {
           </nav>
 
           {/* TDEE preview at final step */}
-          {showTDEECard && tdee && (() => {
-            const adj = Math.max(1200, tdee + (GOAL_DELTAS[primaryGoal] ?? 0))
-            return (
-              <div className="mx-5 mb-6 rounded-2xl bg-white/15 p-4 text-center ring-1 ring-white/20">
-                <p className="text-xs font-medium text-emerald-100">Günlük Kalori Hedefi</p>
-                <p className="mt-1 text-4xl font-extrabold text-white">{adj.toLocaleString('tr-TR')}</p>
-                <p className="text-xs text-emerald-200">kcal / gün</p>
-              </div>
-            )
-          })()}
+          {showTDEECard && macroPreview?.target_calories && (
+            <div className="mx-5 mb-6 rounded-2xl bg-white/15 p-4 text-center ring-1 ring-white/20">
+              <p className="text-xs font-medium text-emerald-100">Günlük Kalori Hedefi</p>
+              <p className="mt-1 text-4xl font-extrabold text-white">{macroPreview.target_calories.toLocaleString('tr-TR')}</p>
+              <p className="text-xs text-emerald-200">kcal / gün</p>
+            </div>
+          )}
         </aside>
 
         {/* ── RIGHT CONTENT PANEL ───────────────────────────────────────────── */}
@@ -922,12 +976,17 @@ export default function OnboardingWizard({ onComplete }) {
           {/* TDEE summary card — final step (right panel) */}
           {showTDEECard && (
             <div className="mx-6 mb-4 flex-shrink-0">
-              <TDEESummaryCard tdee={tdee} stats={stats} primaryGoal={primaryGoal} />
+              <TDEESummaryCard preview={macroPreview} stats={stats} primaryGoal={primaryGoal} />
             </div>
           )}
 
           {/* Bottom navigation */}
           <div className="flex-shrink-0 px-6 pb-10 pt-2 lg:pb-8">
+            {saveError && (
+              <p className="mb-3 rounded-xl bg-red-50 dark:bg-red-900/20 px-3 py-2 text-center text-xs font-semibold text-red-600 dark:text-red-400">
+                {saveError}
+              </p>
+            )}
             <div className="flex gap-3">
               {step > 1 && !isScanning && (
                 <button
@@ -944,14 +1003,19 @@ export default function OnboardingWizard({ onComplete }) {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!canProceed() || isScanning}
+                disabled={!canProceed() || isScanning || saving}
                 className={`flex h-14 flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all ${
-                  canProceed() && !isScanning
+                  canProceed() && !isScanning && !saving
                     ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-200/40 hover:bg-emerald-600 hover:shadow-emerald-300/40 active:scale-[0.98]'
                     : 'cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
                 }`}
               >
-                {isScanning ? (
+                {saving ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    Kaydediliyor…
+                  </>
+                ) : isScanning ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                     Analiz ediliyor...

@@ -4,7 +4,8 @@
  *
  * Exports:
  *   calcTDEE(age, weight, height, gender, activityId) → kcal (int)
- *   calcMacros(totalKcal, goalId) → { protein, carbs, fat, fiber, sugar }
+ *   calcMacros(totalKcal, goalId, weightKg) → { protein, carbs, fat, fiber, sugar }
+ *   getDailyCalorieTarget(profile) → adjusted daily kcal target
  *   goalOffsetToId(goalOffset) → goalId string
  *   GOAL_DELTAS  — calorie delta per goal
  */
@@ -35,13 +36,22 @@ export const GOAL_DELTAS = {
   dengeli:   0,
 }
 
-// ─── Goal → macro percentage splits (medical standard) ────────────────────────
+// ─── Goal → protein multiplier (g per kg body weight) ─────────────────────────
 
-const GOAL_MACRO_PCTS = {
-  kilo_ver:  { protein: 0.35, carbs: 0.40, fat: 0.25 },
-  kilo_al:   { protein: 0.25, carbs: 0.50, fat: 0.25 },
-  kas_kazan: { protein: 0.35, carbs: 0.45, fat: 0.20 },
-  dengeli:   { protein: 0.25, carbs: 0.50, fat: 0.25 },
+const GOAL_PROTEIN_MULT = {
+  kilo_ver:  1.8,
+  kas_kazan: 1.8,
+  kilo_al:   1.6,
+  dengeli:   1.5,
+}
+
+// ─── Goal → fat share of total kcal (25–30% range) ────────────────────────────
+
+const GOAL_FAT_PCT = {
+  kilo_ver:  0.27,
+  kas_kazan: 0.25,
+  kilo_al:   0.25,
+  dengeli:   0.30,
 }
 
 // ─── Mifflin-St Jeor TDEE ─────────────────────────────────────────────────────
@@ -67,29 +77,79 @@ export function calcTDEE(age, weight, height, gender, activityId) {
   return Math.round(bmr * mult)
 }
 
+// ─── Daily calorie target (single source of truth) ────────────────────────────
+
+/**
+ * Returns the user's adjusted daily calorie target.
+ * Prefers `dailyGoal`; falls back to base TDEE + goalOffset with legacy handling.
+ */
+export function getDailyCalorieTarget(profile) {
+  if (!profile) return 0
+
+  const dailyGoal = Number(profile.dailyGoal)
+  if (dailyGoal > 0) return dailyGoal
+
+  const baseTdee = Number(profile.tdee) || 0
+  if (baseTdee <= 0) return 0
+
+  const offset = Number(profile.goalOffset) || 0
+  const withOffset = Math.max(1200, baseTdee + offset)
+
+  // Legacy: onboarding previously stored adjusted kcal in `tdee` — avoid double subtraction
+  if (offset < 0 && withOffset < baseTdee - 400) {
+    return Math.max(1200, baseTdee)
+  }
+
+  return withOffset
+}
+
+/** Extract body weight (kg) from profile object. */
+export function getProfileWeight(profile) {
+  return Number(profile?.stats?.weight) || Number(profile?.weight) || 0
+}
+
 // ─── Goal-based macro calculation ─────────────────────────────────────────────
 
 /**
- * Compute macronutrients from total daily kcal and a goal ID.
+ * Compute macronutrients from total daily kcal, goal, and body weight.
  *
- * Caloric conversion factors:
- *   protein 4 kcal/g  |  carbs 4 kcal/g  |  fat 9 kcal/g
- *
- * Additional metrics (medical guidelines):
- *   fiber  — 14g per 1 000 kcal  (IOM recommendation)
- *   sugar  — ≤10% of total kcal  → max grams = (kcal × 0.10) / 4
+ * Protein: 1.5–1.8 g/kg (goal-dependent)
+ * Fat:     25–30% of total kcal
+ * Carbs:   remainder
  *
  * @param {number} totalKcal
- * @param {string} goalId  — one of GOAL_MACRO_PCTS keys
+ * @param {string} goalId  — one of GOAL_DELTAS keys
+ * @param {number} [weightKg]
  * @returns {{ protein, carbs, fat, fiber, sugar } | null}
  */
-export function calcMacros(totalKcal, goalId) {
+export function calcMacros(totalKcal, goalId, weightKg = 0) {
   if (!totalKcal || totalKcal <= 0) return null
-  const pcts = GOAL_MACRO_PCTS[goalId] ?? GOAL_MACRO_PCTS.dengeli
+
+  const w = Number(weightKg) || 70
+  const proteinMult = GOAL_PROTEIN_MULT[goalId] ?? GOAL_PROTEIN_MULT.dengeli
+  const fatPct      = GOAL_FAT_PCT[goalId]      ?? GOAL_FAT_PCT.dengeli
+
+  let proteinG = Math.round(w * proteinMult)
+  let fatG     = Math.round((totalKcal * fatPct) / 9)
+
+  let proteinKcal = proteinG * 4
+  let fatKcal     = fatG * 9
+
+  // Ensure carbs get at least ~15% of kcal — reduce fat first, then protein
+  if (proteinKcal + fatKcal > totalKcal * 0.85) {
+    fatG     = Math.round((totalKcal * fatPct) / 9)
+    fatKcal  = fatG * 9
+    proteinKcal = Math.max(0, totalKcal - fatKcal - Math.round(totalKcal * 0.40))
+    proteinG = Math.round(proteinKcal / 4)
+  }
+
+  const carbsKcal = Math.max(0, totalKcal - proteinG * 4 - fatG * 9)
+  const carbsG    = Math.round(carbsKcal / 4)
+
   return {
-    protein: Math.round(totalKcal * pcts.protein / 4),
-    carbs:   Math.round(totalKcal * pcts.carbs   / 4),
-    fat:     Math.round(totalKcal * pcts.fat     / 9),
+    protein: proteinG,
+    carbs:   carbsG,
+    fat:     fatG,
     fiber:   Math.round((totalKcal / 1000) * 14),
     sugar:   Math.round((totalKcal * 0.10) / 4),
   }

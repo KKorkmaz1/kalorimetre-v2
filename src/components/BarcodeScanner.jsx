@@ -12,26 +12,119 @@ const BARCODE_FORMATS = [
   Html5QrcodeSupportedFormats.CODE_128,
 ]
 
-const CAMERA_CONFIG = {
-  facingMode: 'environment',
-  advanced: [{ focusMode: 'continuous' }],
+const SCAN_CONFIG = {
+  fps: 12,
+  qrbox: (viewfinderWidth) => ({
+    width: Math.round(viewfinderWidth * 0.8),
+    height: VIEWFINDER_HEIGHT,
+  }),
+  aspectRatio: 1.777,
+  disableFlip: true,
 }
 
 function mapCameraError(err) {
-  const msg = String(err?.message || err?.name || err || '').toLowerCase()
-  if (msg.includes('notallowed') || msg.includes('permission') || msg.includes('denied')) {
-    return 'Kamera izni reddedildi. Tarayıcı ayarlarından kamera erişimine izin verin.'
+  const name = err?.name || ''
+  const msg  = String(err?.message || err || '').toLowerCase()
+
+  if (name === 'NotAllowedError' || msg.includes('notallowed') || msg.includes('permission') || msg.includes('denied')) {
+    return 'Kamera izni reddedildi. Ayarlar → Safari → Kamera bölümünden bu siteye izin verin.'
   }
-  if (msg.includes('notfound') || msg.includes('devices not found') || msg.includes('no camera')) {
+  if (name === 'NotFoundError' || msg.includes('notfound') || msg.includes('devices not found') || msg.includes('no camera')) {
     return 'Kamera bulunamadı. Cihazınızda bir kamera olduğundan emin olun.'
   }
-  if (msg.includes('notreadable') || msg.includes('in use') || msg.includes('busy')) {
+  if (name === 'NotReadableError' || msg.includes('notreadable') || msg.includes('in use') || msg.includes('busy')) {
     return 'Kamera başka bir uygulama tarafından kullanılıyor. Diğer uygulamaları kapatıp tekrar deneyin.'
   }
-  if (msg.includes('overconstrained') || msg.includes('constraint')) {
-    return 'Arka kamera açılamadı. Cihazınızın kamerasını kontrol edin.'
+  if (name === 'OverconstrainedError' || msg.includes('overconstrained') || msg.includes('constraint')) {
+    return 'Arka kamera açılamadı. Ön kamera ile denenecek — barkodu net tutun.'
   }
-  return 'Kamera başlatılamadı. Lütfen tekrar deneyin.'
+  return 'Kamera başlatılamadı. Lütfen sayfayı yenileyip tekrar deneyin.'
+}
+
+/** iOS Safari requires playsInline + muted + autoplay on the video element. */
+function applyIOSVideoAttrs(containerId) {
+  const container = document.getElementById(containerId)
+  const video = container?.querySelector('video')
+  if (!video) return
+
+  video.setAttribute('playsinline', 'true')
+  video.setAttribute('webkit-playsinline', 'true')
+  video.setAttribute('autoplay', 'true')
+  video.setAttribute('muted', 'true')
+  video.playsInline = true
+  video.muted = true
+  video.autoplay = true
+
+  video.play().catch(() => {})
+}
+
+async function pickBackCameraId() {
+  try {
+    const devices = await Html5Qrcode.getCameras()
+    if (!devices?.length) return null
+    const back = devices.find(d =>
+      /back|rear|environment|arka/i.test(d.label),
+    )
+    return (back ?? devices[devices.length - 1]).id
+  } catch {
+    return null
+  }
+}
+
+async function startScannerCamera(html5QrCode, onDecoded) {
+  const cameraAttempts = [
+    async () => {
+      const id = await pickBackCameraId()
+      if (!id) throw new Error('NotFoundError')
+      return html5QrCode.start(
+        id,
+        SCAN_CONFIG,
+        onDecoded,
+        () => {},
+      )
+    },
+    () => html5QrCode.start(
+      {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+        advanced: [{ focusMode: 'continuous' }],
+      },
+      SCAN_CONFIG,
+      onDecoded,
+      () => {},
+    ),
+    () => html5QrCode.start(
+      { facingMode: 'environment' },
+      SCAN_CONFIG,
+      onDecoded,
+      () => {},
+    ),
+    () => html5QrCode.start(
+      { facingMode: 'user' },
+      { ...SCAN_CONFIG, aspectRatio: 1.333 },
+      onDecoded,
+      () => {},
+    ),
+  ]
+
+  let lastErr = null
+  for (const attempt of cameraAttempts) {
+    try {
+      await attempt()
+      applyIOSVideoAttrs(SCANNER_ID)
+      // Re-apply after library paints the video (iOS timing)
+      requestAnimationFrame(() => applyIOSVideoAttrs(SCANNER_ID))
+      setTimeout(() => applyIOSVideoAttrs(SCANNER_ID), 300)
+      return
+    } catch (err) {
+      lastErr = err
+      if (html5QrCode.isScanning) {
+        await html5QrCode.stop().catch(() => {})
+      }
+    }
+  }
+  throw lastErr ?? new Error('Kamera başlatılamadı')
 }
 
 export default function BarcodeScanner({ onScan, onClose }) {
@@ -52,6 +145,7 @@ export default function BarcodeScanner({ onScan, onClose }) {
   useEffect(() => {
     let html5QrCode = null
     let mounted = true
+    scannedRef.current = false
 
     async function start() {
       html5QrCode = new Html5Qrcode(SCANNER_ID, {
@@ -61,27 +155,16 @@ export default function BarcodeScanner({ onScan, onClose }) {
       })
       scannerRef.current = html5QrCode
 
+      const onDecoded = (decodedText) => {
+        if (scannedRef.current) return
+        scannedRef.current = true
+        html5QrCode.stop()
+          .then(() => onScan(decodedText.trim()))
+          .catch(() => onScan(decodedText.trim()))
+      }
+
       try {
-        await html5QrCode.start(
-          CAMERA_CONFIG,
-          {
-            fps: 12,
-            qrbox: (viewfinderWidth) => ({
-              width: Math.round(viewfinderWidth * 0.8),
-              height: VIEWFINDER_HEIGHT,
-            }),
-            aspectRatio: 1.777,
-            disableFlip: true,
-          },
-          (decodedText) => {
-            if (scannedRef.current) return
-            scannedRef.current = true
-            html5QrCode.stop()
-              .then(() => onScan(decodedText.trim()))
-              .catch(() => onScan(decodedText.trim()))
-          },
-          () => {}
-        )
+        await startScannerCamera(html5QrCode, onDecoded)
         if (mounted) setReady(true)
       } catch (err) {
         if (mounted) {
@@ -144,12 +227,10 @@ export default function BarcodeScanner({ onScan, onClose }) {
             <div className="flex flex-shrink-0" style={{ height: VIEWFINDER_HEIGHT }}>
               <div className="w-[10%] bg-black/72" />
               <div className="relative w-[80%]">
-                {/* Corner brackets */}
                 <span className="absolute left-0 top-0 h-4 w-4 border-l-[3px] border-t-[3px] border-emerald-400" />
                 <span className="absolute right-0 top-0 h-4 w-4 border-r-[3px] border-t-[3px] border-emerald-400" />
                 <span className="absolute bottom-0 left-0 h-4 w-4 border-b-[3px] border-l-[3px] border-emerald-400" />
                 <span className="absolute bottom-0 right-0 h-4 w-4 border-b-[3px] border-r-[3px] border-emerald-400" />
-                {/* Scan line */}
                 <div className="absolute inset-x-2 top-0 h-0.5 animate-[scan_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
               </div>
               <div className="w-[10%] bg-black/72" />
@@ -158,7 +239,6 @@ export default function BarcodeScanner({ onScan, onClose }) {
           </div>
         )}
 
-        {/* Loading state */}
         {!ready && !error && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black">
             <svg className="h-8 w-8 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none">
@@ -169,7 +249,6 @@ export default function BarcodeScanner({ onScan, onClose }) {
           </div>
         )}
 
-        {/* Error state */}
         {error && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black px-6 text-center">
             <span className="text-4xl leading-none">📷</span>
@@ -185,7 +264,6 @@ export default function BarcodeScanner({ onScan, onClose }) {
         )}
       </div>
 
-      {/* Footer hint + cancel */}
       <div className="relative z-10 flex-shrink-0 space-y-3 px-5 py-5 pb-8">
         {ready && !error && (
           <p className="text-center text-[11px] font-medium text-slate-500">

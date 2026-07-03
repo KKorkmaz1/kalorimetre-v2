@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useDiet } from '../context/DietContext'
+import { getDailyCalorieTarget } from '../utils/macroEngine'
 import { ProteinIcon, CarbsIcon, FatIcon } from './Meal/MealIcons'
 import { supabase } from '../utils/supabaseClient'
 
@@ -12,6 +13,11 @@ const TR_MONTHS = [
 const TR_DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
 
 const DAY_HEADERS = ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz']
+
+const YEAR_OPTIONS = [2024, 2025, 2026]
+
+const selectBase =
+  'appearance-none cursor-pointer bg-transparent text-center font-bold text-gray-700 outline-none transition-colors hover:text-green-600 dark:text-slate-200 dark:hover:text-emerald-400'
 
 
 
@@ -44,9 +50,23 @@ function buildDayData(year, month, day, tdee = 2000, monthMap = {}) {
   const kcal = stored.logs.reduce((s, l) => s + (Number(l.kcal) || 0), 0)
   if (kcal === 0) return { logged: false }
 
-  const water  = stored.water ?? 0
-  const status = tdee > 0 && kcal > tdee * 1.15 ? 'failed' : 'success'
-  return { logged: true, status, kcal, water, storedData: stored }
+  const protein = stored.logs.reduce((s, l) => s + (Number(l.protein) || 0), 0)
+  const carbs   = stored.logs.reduce((s, l) => s + (Number(l.carbs)   || 0), 0)
+  const fat     = stored.logs.reduce((s, l) => s + (Number(l.fat)     || 0), 0)
+  const water   = stored.water ?? 0
+  const status  = tdee > 0 && kcal > tdee ? 'failed' : 'success'
+
+  return {
+    logged: true,
+    status,
+    kcal,
+    water,
+    protein,
+    carbs,
+    fat,
+    remaining: tdee - kcal,
+    storedData: stored,
+  }
 }
 
 function fmtTime(isoString) {
@@ -113,7 +133,7 @@ const MEAL_TYPE_META = {
 function DayDetailModal({ year, month, day, storedData, dayEntry, onClose }) {
   const { profile } = useDiet()
 
-  const calorieTarget = (profile?.tdee ?? 0) + (profile?.goalOffset ?? 0)
+  const calorieTarget = getDailyCalorieTarget(profile)
   const macroTarget   = profile?.macros ?? { protein: 130, carbs: 260, fat: 65 }
   const waterGoal     = profile?.waterGoal ?? 8
 
@@ -308,25 +328,123 @@ function DayDetailModal({ year, month, day, storedData, dayEntry, onClose }) {
 
 // ─── Calendar day cell ────────────────────────────────────────────────────────
 
-function fmtKcal(k) {
-  if (k >= 1000) {
-    const v = (k / 1000).toFixed(1)
-    return (v.endsWith('.0') ? v.slice(0, -2) : v) + 'k'
-  }
-  return String(k)
+const CELL_MIN_H = 'min-h-[100px] sm:min-h-[120px]'
+
+function DayProgressRing({ day, pct, isSuccess, isToday, size = 40 }) {
+  const sw = 3
+  const r  = (size - sw * 2) / 2
+  const C  = 2 * Math.PI * r
+  const fillPct = Math.min(100, Math.max(0, pct))
+  const offset  = C * (1 - fillPct / 100)
+  const ringStroke = isSuccess ? '#22c55e' : '#ef4444'
+  const trackStroke = isSuccess ? '#bbf7d0' : '#fecaca'
+
+  return (
+    <div className="relative flex-shrink-0 sm:hidden" style={{ width: size, height: size }}>
+      <svg width={size} height={size} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={trackStroke} strokeWidth={sw} className="dark:opacity-40" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          fill="none"
+          stroke={ringStroke}
+          strokeWidth={sw}
+          strokeLinecap="round"
+          strokeDasharray={C}
+          strokeDashoffset={offset}
+          className="transition-all duration-500"
+          style={{ transformOrigin: `${size / 2}px ${size / 2}px`, transform: 'rotate(-90deg)' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className={`text-sm font-bold leading-none ${
+          isToday ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-800 dark:text-slate-100'
+        }`}>
+          {day}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function DayProgressRingLg({ day, pct, isSuccess, isToday, size = 48 }) {
+  const sw = 3.5
+  const r  = (size - sw * 2) / 2
+  const C  = 2 * Math.PI * r
+  const fillPct = Math.min(100, Math.max(0, pct))
+  const offset  = C * (1 - fillPct / 100)
+  const ringStroke = isSuccess ? '#22c55e' : '#ef4444'
+  const trackStroke = isSuccess ? '#bbf7d0' : '#fecaca'
+
+  return (
+    <div className="relative hidden flex-shrink-0 sm:block" style={{ width: size, height: size }}>
+      <svg width={size} height={size} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={trackStroke} strokeWidth={sw} className="dark:opacity-40" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          fill="none"
+          stroke={ringStroke}
+          strokeWidth={sw}
+          strokeLinecap="round"
+          strokeDasharray={C}
+          strokeDashoffset={offset}
+          className="transition-all duration-500"
+          style={{ transformOrigin: `${size / 2}px ${size / 2}px`, transform: 'rotate(-90deg)' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className={`text-base font-bold leading-none ${
+          isToday ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-800 dark:text-slate-100'
+        }`}>
+          {day}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function EmptyDayRing({ day, isToday }) {
+  const dayClass = isToday
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : 'text-gray-800 dark:text-slate-200'
+
+  return (
+    <>
+      <div className="relative flex-shrink-0 sm:hidden" style={{ width: 40, height: 40 }}>
+        <svg width={40} height={40} aria-hidden="true">
+          <circle cx={20} cy={20} r={16.5} fill="none" stroke="#e5e7eb" strokeWidth={3} className="dark:stroke-night-border" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={`text-sm font-bold leading-none ${dayClass}`}>{day}</span>
+        </div>
+      </div>
+      <div className="relative hidden flex-shrink-0 sm:block" style={{ width: 48, height: 48 }}>
+        <svg width={48} height={48} aria-hidden="true">
+          <circle cx={24} cy={24} r={20} fill="none" stroke="#e5e7eb" strokeWidth={3.5} className="dark:stroke-night-border" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={`text-base font-bold leading-none ${dayClass}`}>{day}</span>
+        </div>
+      </div>
+    </>
+  )
 }
 
 function DayCell({ day, data, isToday, onClick, target = 2000 }) {
-  // Empty padding cell
+  const cellMotion =
+    'cursor-pointer transition-transform duration-200 hover:scale-[1.03] active:scale-95'
+  const cellBase = `flex w-full flex-col items-center justify-between rounded-xl p-2 ${CELL_MIN_H}`
+
+  // Empty padding cell — invisible spacer to preserve grid rhythm
   if (!day) {
-    return <div className="bg-white dark:bg-night-card" style={{ minHeight: 72 }} />
+    return <div className={`rounded-xl ${CELL_MIN_H}`} aria-hidden="true" />
   }
 
-  // Future date — no data
+  // Future date — muted, non-interactive
   if (!data) {
     return (
-      <div className="flex flex-col items-center bg-slate-50/60 dark:bg-night-bg/60 px-0.5 py-1.5" style={{ minHeight: 72 }}>
-        <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600">{day}</span>
+      <div className={`${cellBase} border border-transparent bg-gray-50/50 dark:bg-night-bg/40`}>
+        <EmptyDayRing day={day} isToday={false} />
+        <span className="text-[9px] text-gray-300 dark:text-slate-600">—</span>
       </div>
     )
   }
@@ -335,71 +453,58 @@ function DayCell({ day, data, isToday, onClick, target = 2000 }) {
   if (!data.logged) {
     return (
       <button
-        type="button" onClick={onClick}
-        className="flex w-full cursor-pointer flex-col items-center bg-white dark:bg-night-card px-0.5 py-1.5 transition-all hover:bg-emerald-50 dark:hover:bg-emerald-900/10 active:scale-95"
-        style={{ minHeight: 72 }}
+        type="button"
+        onClick={onClick}
+        className={`${cellBase} border border-transparent bg-gray-50 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-gray-100 hover:shadow-md dark:bg-night-muted dark:hover:bg-night-border ${cellMotion}`}
       >
-        <span className={`text-[10px] font-bold ${isToday ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
-          {day}
-        </span>
-        <span className="mb-1 mt-auto text-[9px] text-slate-300 dark:text-slate-600">—</span>
-        <span className="text-[8px] text-slate-200 dark:text-slate-700">/{fmtKcal(target)}</span>
+        <EmptyDayRing day={day} isToday={isToday} />
+        <p className="text-[10px] font-medium text-gray-400 dark:text-slate-500">
+          0 / {target.toLocaleString('tr-TR')}
+        </p>
       </button>
     )
   }
 
-  // Logged day — success or over-limit
+  // Logged day — mini dashboard
   const isSuccess = data.status === 'success'
-  const pct = Math.min(100, Math.round((data.kcal / target) * 100))
+  const pct = target > 0 ? (data.kcal / target) * 100 : 0
+  const hasMacros = data.protein > 0 || data.carbs > 0 || data.fat > 0
+  const remaining = data.remaining ?? target - data.kcal
 
   return (
     <button
-      type="button" onClick={onClick}
-      className={`flex w-full cursor-pointer flex-col items-center px-1 py-1.5 transition-all hover:brightness-95 active:scale-[0.96] ${
+      type="button"
+      onClick={onClick}
+      className={`${cellBase} shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${cellMotion} ${
         isSuccess
-          ? 'bg-emerald-50 dark:bg-emerald-900/20'
-          : 'bg-red-50 dark:bg-red-900/20'
+          ? 'border border-green-200 bg-green-50 dark:border-emerald-800/40 dark:bg-emerald-900/20'
+          : 'border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/20'
       }`}
-      style={{ minHeight: 72 }}
     >
-      {/* Day number */}
-      <span className={`text-[10px] font-bold leading-none ${
-        isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
-      }`}>
-        {day}
-      </span>
-
-      {/* Status badge */}
-      <div className={`my-0.5 flex h-[16px] w-[16px] flex-shrink-0 items-center justify-center rounded-full ${
-        isSuccess ? 'bg-emerald-500' : 'bg-red-500'
-      }`}>
-        {isSuccess
-          ? <CheckIcon className="h-2 w-2 text-white" />
-          : <XIcon     className="h-2 w-2 text-white" />
-        }
+      <div className="flex flex-shrink-0 flex-col items-center">
+        <DayProgressRing day={day} pct={pct} isSuccess={isSuccess} isToday={isToday} />
+        <DayProgressRingLg day={day} pct={pct} isSuccess={isSuccess} isToday={isToday} />
       </div>
 
-      {/* Consumed kcal */}
-      <span className={`text-[9px] font-extrabold leading-none tabular-nums ${
-        isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-      }`}>
-        {fmtKcal(data.kcal)}
-      </span>
-
-      {/* Mini progress bar */}
-      <div className={`mt-0.5 w-full overflow-hidden rounded-full ${
-        isSuccess ? 'bg-emerald-200 dark:bg-emerald-900/50' : 'bg-red-200 dark:bg-red-900/50'
-      }`} style={{ height: 3 }}>
-        <div
-          className={`h-full rounded-full ${isSuccess ? 'bg-emerald-500' : 'bg-red-500'}`}
-          style={{ width: `${pct}%` }}
-        />
+      <div className="mt-1 w-full min-w-0 text-center">
+        <p className="truncate text-[10px] font-semibold tabular-nums text-gray-700 dark:text-slate-200 sm:text-xs">
+          {data.kcal.toLocaleString('tr-TR')} / {target.toLocaleString('tr-TR')} kcal
+        </p>
+        <p className={`mt-0.5 truncate text-[8px] tabular-nums sm:text-[9px] ${
+          remaining >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+        }`}>
+          {remaining >= 0
+            ? `${remaining.toLocaleString('tr-TR')} kalan`
+            : `${Math.abs(remaining).toLocaleString('tr-TR')} fazla`}
+        </p>
+        {hasMacros && (
+          <p className="mt-0.5 flex justify-center gap-1 truncate text-[8px] text-gray-500 tabular-nums dark:text-slate-400 sm:text-[9px]">
+            <span>P:{Math.round(data.protein)}g</span>
+            <span>C:{Math.round(data.carbs)}g</span>
+            <span>Y:{Math.round(data.fat)}g</span>
+          </p>
+        )}
       </div>
-
-      {/* Target kcal */}
-      <span className="mt-0.5 text-[8px] leading-none text-slate-400 dark:text-slate-500 tabular-nums">
-        /{fmtKcal(target)}
-      </span>
     </button>
   )
 }
@@ -407,18 +512,30 @@ function DayCell({ day, data, isToday, onClick, target = 2000 }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function History() {
-  const { profile, userId } = useDiet()
+  const { profile, userId, mealsByDate } = useDiet()
   const today  = new Date()
   const [year,  setYear]  = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
 
   const [selectedCell,  setSelectedCell]  = useState(null)
-  const [monthMap,      setMonthMap]      = useState({}) // { 'YYYY-MM-DD': { logs, water } }
+  const [monthMap,      setMonthMap]      = useState({}) // Supabase rows for displayed month
   const [loadingMonth,  setLoadingMonth]  = useState(false)
 
-  const tdee = profile?.tdee ?? 2000
+  const tdee = getDailyCalorieTarget(profile) || 2000
 
   const atMax = year === today.getFullYear() && month === today.getMonth()
+
+  // Live context data overrides stale Supabase cache for the same dates
+  const mergedMonthMap = useMemo(() => {
+    const merged = { ...monthMap }
+    for (const [dateStr, dayData] of Object.entries(mealsByDate)) {
+      const [y, m] = dateStr.split('-').map(Number)
+      if (y === year && m === month + 1) {
+        merged[dateStr] = dayData
+      }
+    }
+    return merged
+  }, [monthMap, mealsByDate, year, month])
 
   // ── Fetch all daily_logs for the displayed month ───────────────────────────
   useEffect(() => {
@@ -479,10 +596,20 @@ export default function History() {
   const dayDataMap = useMemo(() => {
     const map = {}
     for (let d = 1; d <= daysInMonth; d++) {
-      map[d] = buildDayData(year, month, d, tdee, monthMap)
+      map[d] = buildDayData(year, month, d, tdee, mergedMonthMap)
     }
     return map
-  }, [year, month, daysInMonth, tdee, monthMap])
+  }, [year, month, daysInMonth, tdee, mergedMonthMap])
+
+  const selectedDayLive = useMemo(() => {
+    if (!selectedCell) return null
+    const { year: y, month: m, day: d } = selectedCell
+    const dayEntry = buildDayData(y, m, d, tdee, mergedMonthMap)
+    return {
+      storedData: mergedMonthMap[toDateStr(y, m, d)] ?? null,
+      dayEntry,
+    }
+  }, [selectedCell, tdee, mergedMonthMap])
 
   const { successCount, failedCount, avgKcal } = useMemo(() => {
     let success = 0, failed = 0, total = 0, count = 0
@@ -507,20 +634,43 @@ export default function History() {
         <div className="mt-1 flex items-center justify-between">
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">Geçmiş</h1>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <button
               type="button" onClick={prevMonth}
-              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card text-slate-500 dark:text-slate-400 transition-colors hover:border-slate-300 dark:hover:border-night-muted">
+              aria-label="Önceki ay"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 dark:border-night-border dark:bg-night-card dark:text-slate-400 dark:hover:border-night-muted">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
               </svg>
             </button>
-            <span className="min-w-[7.5rem] text-center text-sm font-bold text-slate-800 dark:text-slate-200">
-              {TR_MONTHS[month]} {year}
-            </span>
+
+            <div className="flex items-center">
+              <select
+                aria-label="Ay seçin"
+                value={month}
+                onChange={e => setMonth(Number(e.target.value))}
+                className={`${selectBase} mx-1 text-sm`}
+              >
+                {TR_MONTHS.map((name, idx) => (
+                  <option key={name} value={idx}>{name}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Yıl seçin"
+                value={year}
+                onChange={e => setYear(Number(e.target.value))}
+                className={`${selectBase} mx-1 text-sm`}
+              >
+                {YEAR_OPTIONS.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="button" onClick={nextMonth} disabled={atMax}
-              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card text-slate-500 dark:text-slate-400 transition-colors hover:border-slate-300 dark:hover:border-night-muted disabled:cursor-not-allowed disabled:opacity-30">
+              aria-label="Sonraki ay"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-30 dark:border-night-border dark:bg-night-card dark:text-slate-400 dark:hover:border-night-muted">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
               </svg>
@@ -530,42 +680,63 @@ export default function History() {
       </div>
 
       {/* ── Summary stat cards ── */}
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-3 gap-3">
         {[
-          { value: successCount, label: 'Başarılı',  iconBg: 'bg-emerald-100 dark:bg-emerald-900/30', icon: <CheckIcon className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> },
-          { value: failedCount,  label: 'Başarısız', iconBg: 'bg-red-100 dark:bg-red-900/30',          icon: <XIcon     className="h-3.5 w-3.5 text-red-500 dark:text-red-400"          /> },
+          {
+            value: successCount,
+            label: 'Başarılı',
+            iconBg: 'bg-green-100/80 dark:bg-emerald-900/30',
+            iconColor: 'text-green-600 dark:text-emerald-400',
+            icon: CheckIcon,
+          },
+          {
+            value: failedCount,
+            label: 'Başarısız',
+            iconBg: 'bg-red-100/80 dark:bg-red-900/30',
+            iconColor: 'text-red-600 dark:text-red-400',
+            icon: XIcon,
+          },
           {
             value: avgKcal > 0 ? avgKcal.toLocaleString('tr-TR') : '—',
-            label: 'Ort. Kalori', iconBg: 'bg-amber-100 dark:bg-amber-900/30',
-            icon: <FlameIcon className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />,
+            label: 'Ort. Kalori',
+            iconBg: 'bg-amber-100/80 dark:bg-amber-900/30',
+            iconColor: 'text-amber-600 dark:text-amber-400',
+            icon: FlameIcon,
           },
-        ].map(({ value, label, iconBg, icon }) => (
-          <div key={label} className="rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card p-3.5 shadow-sm">
-            <div className={`mb-2 flex h-7 w-7 items-center justify-center rounded-full ${iconBg}`}>{icon}</div>
-            <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100">{value}</p>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{label}</p>
+        ].map(({ value, label, iconBg, iconColor, icon: Icon }) => (
+          <div
+            key={label}
+            className="group rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md dark:border-night-border dark:bg-night-card"
+          >
+            <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}>
+              <Icon className={`h-4 w-4 ${iconColor}`} />
+            </div>
+            <p className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">{value}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
           </div>
         ))}
       </div>
 
       {/* ── Calendar grid ── */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-night-border dark:bg-night-card">
         {/* Loading overlay */}
         {loadingMonth && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-night-card/70 backdrop-blur-sm rounded-2xl">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 dark:border-night-border border-t-emerald-500" />
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/70 backdrop-blur-sm dark:bg-night-card/70">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-500 dark:border-night-border" />
           </div>
         )}
 
         {/* Day headers */}
-        <div className="grid grid-cols-7 border-b border-slate-100 dark:border-night-border bg-slate-50 dark:bg-night-muted">
+        <div className="mb-3 grid grid-cols-7 gap-2">
           {DAY_HEADERS.map(d => (
-            <div key={d} className="py-2 text-center text-[11px] font-bold text-slate-400 dark:text-slate-500">{d}</div>
+            <div key={d} className="py-1 text-center text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              {d}
+            </div>
           ))}
         </div>
 
-        {/* Cells — gap-px creates hairline separators using the parent background color */}
-        <div className="grid grid-cols-7 gap-px bg-slate-100 dark:bg-night-border">
+        {/* Floating day cards */}
+        <div className="grid grid-cols-7 gap-2 sm:gap-3">
           {cells.map((day, idx) => {
             const entry = day ? dayDataMap[day] : null
             return (
@@ -575,11 +746,7 @@ export default function History() {
                 data={entry}
                 isToday={isCurrentMonth && day === today.getDate()}
                 target={tdee}
-                onClick={day ? () => setSelectedCell({
-                  year, month, day,
-                  dayEntry:   entry,
-                  storedData: entry?.storedData ?? null,
-                }) : undefined}
+                onClick={day ? () => setSelectedCell({ year, month, day }) : undefined}
               />
             )
           })}
@@ -587,7 +754,7 @@ export default function History() {
       </div>
 
       {/* ── Colour legend ── */}
-      <div className="rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-all duration-300 dark:border-night-border dark:bg-night-card">
         <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Renk Kodu</p>
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-1.5">
@@ -611,13 +778,13 @@ export default function History() {
       </div>
 
       {/* ── Day detail modal ── */}
-      {selectedCell && (
+      {selectedCell && selectedDayLive && (
         <DayDetailModal
           year={selectedCell.year}
           month={selectedCell.month}
           day={selectedCell.day}
-          storedData={selectedCell.storedData}
-          dayEntry={selectedCell.dayEntry}
+          storedData={selectedDayLive.storedData}
+          dayEntry={selectedDayLive.dayEntry}
           onClose={() => setSelectedCell(null)}
         />
       )}
