@@ -1,6 +1,7 @@
 import { CloseIcon, PlusIcon } from './MealIcons'
 import { unitNeedsGramInput } from './foodData'
 import { getServingPreview } from '../../utils/foodDatabase.js'
+import { getDisplayUnits } from '../../services/foodService'
 
 export default function SearchBar({
   query, setQuery,
@@ -174,23 +175,39 @@ export default function SearchBar({
             )}
             {!searchLoading && results.map(food => {
               const serving = getServingPreview(food)
+              const displayUnits = getDisplayUnits(food, 2)
+              const hasUsefulPortion = serving.unit !== 'Gram' && serving.unit !== 'Mililitre'
+
               return (
                 <button
                   key={food.id} type="button" onClick={() => selectFood(food)}
-                  className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 py-3 text-left shadow-sm transition-all hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-[0.98]">
+                  className="flex w-full cursor-pointer items-center rounded-2xl border border-slate-100 dark:border-night-border bg-white dark:bg-night-card px-4 py-2.5 text-left shadow-sm transition-all hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-[0.98]">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{food.name}</p>
-                    <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                      <span className="font-semibold text-slate-600 dark:text-slate-300">
-                        1 {serving.unit}: {serving.kcal} kcal
-                      </span>
-                      {' · '}P:{serving.protein}g K:{serving.carbs}g Y:{serving.fat}g
+                    <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{food.name}</p>
+                    <p className="mt-0.5 truncate text-[10px] leading-snug text-slate-400 dark:text-slate-500">
+                      {hasUsefulPortion && (
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {serving.unit}
+                          {serving.grams > 0 && ` · ≈${serving.grams}g`}
+                          {' · '}
+                        </span>
+                      )}
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">{serving.kcal} kcal</span>
+                      {' · '}
+                      P:{serving.protein}g K:{serving.carbs}g Y:{serving.fat}g
                     </p>
-                  </div>
-                  <div className="flex flex-shrink-0 flex-wrap justify-end gap-1">
-                    {Object.keys(food.units).filter(u => u !== 'Gram' && u !== 'Mililitre').slice(0, 3).map(u => (
-                      <span key={u} className="rounded-full bg-slate-100 dark:bg-night-muted px-2 py-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400">{u}</span>
-                    ))}
+                    {displayUnits.length > 0 && (
+                      <div className="mt-1 flex gap-1 overflow-hidden">
+                        {displayUnits.map(u => (
+                          <span
+                            key={u}
+                            className="shrink-0 rounded-full bg-slate-100 dark:bg-night-muted px-2 py-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400"
+                          >
+                            {u}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </button>
               )

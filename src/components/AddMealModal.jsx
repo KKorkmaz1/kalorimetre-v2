@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useDiet } from '../context/DietContext'
-import { MEAL_TYPES, FOOD_DB, checkHealthImpact, calcPreview, parseQuantity, unitNeedsGramInput } from './Meal/foodData'
+import { MEAL_TYPES, checkHealthImpact, calcPreview, parseQuantity, unitNeedsGramInput } from './Meal/foodData'
+import { searchFoodsLocal } from '../services/foodService'
 import { PlusIcon, CloseIcon } from './Meal/MealIcons'
 import SearchBar from './Meal/SearchBar'
 import BasketItem from './Meal/BasketItem'
@@ -186,16 +187,65 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const searchPortionRequestId = useRef(0)
   const barcodePortionRequestId = useRef(0)
   const unknownPortionRequestId = useRef(0)
+  const searchRequestId = useRef(0)
 
-  // Local food search — full list when empty, instant filter as user types
-  const searchResults = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return FOOD_DB
-    return FOOD_DB.filter(f =>
-      f.name.toLowerCase().includes(q) ||
-      q.split(/\s+/).every(word => f.name.toLowerCase().includes(word))
-    )
-  }, [query])
+  const [searchResults, setSearchResults] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
+
+  // Reset search UI whenever the modal opens (query may already be "" after close)
+  useEffect(() => {
+    if (!isOpen) return
+
+    setQuery('')
+    setSelFood(null)
+    setSelUnit('')
+    setQty('1')
+    setGramsPerUnit('')
+    setSearchPortionLoading(false)
+    setSearchPortionAiHint(false)
+    setSearchLoading(false)
+  }, [isOpen])
+
+  // Local clean catalog search with debounce and race-condition guard
+  useEffect(() => {
+    if (!isOpen) return
+
+    const requestId = ++searchRequestId.current
+
+    async function applyResults(results) {
+      if (searchRequestId.current !== requestId) return
+      setSearchResults(results)
+      setSearchLoading(false)
+    }
+
+    if (!query.trim()) {
+      setSearchLoading(false)
+      searchFoodsLocal('')
+        .then(applyResults)
+        .catch(err => {
+          console.error('[AddMealModal] search error:', err)
+          if (searchRequestId.current !== requestId) return
+          setSearchResults([])
+          setSearchLoading(false)
+        })
+      return
+    }
+
+    setSearchLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchFoodsLocal(query)
+        await applyResults(results)
+      } catch (err) {
+        console.error('[AddMealModal] search error:', err)
+        if (searchRequestId.current !== requestId) return
+        setSearchResults([])
+        setSearchLoading(false)
+      }
+    }, 200)
+
+    return () => clearTimeout(timer)
+  }, [query, isOpen])
 
   const preview = useMemo(
     () => calcPreview(selFood, selUnit, qty, gramsPerUnit),
@@ -912,6 +962,8 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   function resetAll() {
     setBasket([]); setMealLabel(''); setMealType('Öğle'); setTab('search')
     setQuery(''); setSelFood(null); setSelUnit(''); setQty('1'); setGramsPerUnit('')
+    setSearchResults([]); setSearchLoading(false)
+    searchRequestId.current += 1
     setSearchPortionLoading(false); setSearchPortionAiHint(false)
     setMName(''); setMKcal(''); setMProt(''); setMCarb(''); setMFat('')
     setMFib(''); setMSug(''); setError('')
@@ -1425,7 +1477,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                   portionAiHint={searchPortionAiHint}
                   onPortionEstimate={runSearchPortionEstimate}
                   results={searchResults}
-                  searchLoading={false}
+                  searchLoading={searchLoading}
                   preview={preview}
                   onAddToBasket={addToBasketFromSearch}
                   setError={setError}
