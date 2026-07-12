@@ -1,0 +1,53 @@
+﻿candidate_id,name_tr,name_en,category_tr,category_en,default_portion_label_tr,default_portion_grams,aliases_tr,tags,preferred_source,source_priority,notes
+bev_001,Su,Water,İçecek,Beverage,1 Su Bardağı,200,"su, water",Vegan;Vejetaryen;Glutensiz;Laktozsuz,MANUAL_REVIEW,1,0 kcal baseline; verify as standard water
+bev_002,Maden Suyu (Sade),Plain mineral water,İçecek,Beverage,1 Şişe,200,"maden suyu, soda, mineralli su",Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,packaged/mineral content varies; barcode preferred
+bev_003,Soda (Sade),Club soda,İçecek,Beverage,1 Şişe,200,"soda, sade soda",Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,packaged carbonated water; barcode preferred
+bev_004,Türk Çayı (Şekersiz),"Black tea, unsweetened",İçecek,Beverage,1 Çay Bardağı,100,"çay, türk çayı, şekersiz çay",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,plain unsweetened tea
+bev_005,Türk Çayı (Şekerli),Black tea with sugar,İçecek,Beverage,1 Çay Bardağı,100,"şekerli çay, çay şekerli",Vegan;Vejetaryen;Glutensiz;Laktozsuz,RECIPE,2,recipe: tea + sugar amount; user sugar count may be useful
+bev_006,Bitki Çayı (Şekersiz),"Herbal tea, unsweetened",İçecek,Beverage,1 Fincan,200,"bitki çayı, herbal tea",Vegan;Vejetaryen;Glutensiz;Laktozsuz,MANUAL_REVIEW,3,weak coverage; usually near-zero if unsweetened
+bev_007,Ihlamur Çayı,Linden tea,İçecek,Beverage,1 Fincan,200,"ıhlamur, ıhlamur çayı",Vegan;Vejetaryen;Glutensiz;Laktozsuz,MANUAL_REVIEW,3,herbal infusion; verify as unsweetened
+bev_008,Yeşil Çay (Şekersiz),"Green tea, unsweetened",İçecek,Beverage,1 Fincan,200,"yeşil çay, green tea",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,plain unsweetened green tea
+bev_009,Türk Kahvesi (Sade),"Turkish coffee, unsweetened",İçecek,Beverage,1 Fincan,60,"türk kahvesi, sade kahve",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_MANUAL,2,plain coffee; Turkish serving size differs
+bev_010,Filtre Kahve (Sade),"Brewed coffee, black",İçecek,Beverage,1 Kupa,240,"filtre kahve, sade filtre kahve",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,black brewed coffee
+bev_011,Espresso,Espresso coffee,İçecek,Beverage,1 Shot,30,espresso,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,espresso shot
+bev_012,Americano,Americano coffee,İçecek,Beverage,1 Kupa,240,americano,Vegan;Vejetaryen;Glutensiz;Laktozsuz,RECIPE,2,espresso + water; near black coffee
+bev_013,Latte,Latte,İçecek,Beverage,1 Bardak,250,"latte, cafe latte",Vejetaryen;Glutensiz;Kuruyemişsiz,RECIPE_OR_OPEN_FOOD_FACTS,2,milk ratio varies; recipe or branded cafe
+bev_014,Cappuccino,Cappuccino,İçecek,Beverage,1 Fincan,180,cappuccino,Vejetaryen;Glutensiz;Kuruyemişsiz,RECIPE_OR_OPEN_FOOD_FACTS,2,milk ratio varies
+bev_015,Sütlü Türk Kahvesi,Turkish coffee with milk,İçecek,Beverage,1 Fincan,100,sütlü türk kahvesi,Vejetaryen;Glutensiz,RECIPE,2,coffee + milk; sugar optional
+bev_016,Ayran,Ayran,İçecek,Beverage,1 Su Bardağı,200,ayran,Vejetaryen;Glutensiz;Kuruyemişsiz,TURKOMP_OR_RECIPE,1,Turkish drink; recipe/yogurt-water-salt
+bev_017,Kefir,Kefir,İçecek,Beverage,1 Su Bardağı,200,kefir,Vejetaryen;Glutensiz;Kuruyemişsiz,USDA_OR_OPEN_FOOD_FACTS,2,plain kefir values vary by fat
+bev_018,Tam Yağlı Süt,Whole milk,İçecek,Beverage,1 Su Bardağı,200,"süt, tam yağlı süt",Vejetaryen;Glutensiz;Kuruyemişsiz,USDA,1,basic dairy beverage
+bev_019,Yarım Yağlı Süt,Reduced-fat milk,İçecek,Beverage,1 Su Bardağı,200,yarım yağlı süt,Vejetaryen;Glutensiz;Kuruyemişsiz,USDA,1,basic dairy beverage
+bev_020,Yağsız Süt,Skim milk,İçecek,Beverage,1 Su Bardağı,200,"yağsız süt, light süt",Vejetaryen;Glutensiz;Kuruyemişsiz,USDA,1,basic dairy beverage
+bev_021,Laktozsuz Süt,Lactose-free milk,İçecek,Beverage,1 Su Bardağı,200,laktozsuz süt,Vejetaryen;Glutensiz;Kuruyemişsiz,OPEN_FOOD_FACTS,2,packaged values vary
+bev_022,Soya Sütü (Şekersiz),Unsweetened soy milk,İçecek,Beverage,1 Su Bardağı,200,"soya sütü, şekersiz soya sütü",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_OPEN_FOOD_FACTS,2,brand/formulation varies
+bev_023,Badem Sütü (Şekersiz),Unsweetened almond milk,İçecek,Beverage,1 Su Bardağı,200,"badem sütü, şekersiz badem sütü",Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,brand values vary
+bev_024,Yulaf Sütü (Şekersiz),Unsweetened oat milk,İçecek,Beverage,1 Su Bardağı,200,"yulaf sütü, şekersiz yulaf sütü",Vegan;Vejetaryen;Laktozsuz,OPEN_FOOD_FACTS,2,brand values vary
+bev_025,Muzlu Süt,Banana milk,İçecek,Beverage,1 Kutu/Bardak,200,muzlu süt,Vejetaryen;Glutensiz,OPEN_FOOD_FACTS,2,packaged or recipe; sugar varies
+bev_026,Kakaolu Süt,Chocolate milk,İçecek,Beverage,1 Kutu/Bardak,200,"kakaolu süt, çikolatalı süt",Vejetaryen;Glutensiz,OPEN_FOOD_FACTS,2,packaged values vary
+bev_027,Portakal Suyu,Orange juice,İçecek,Beverage,1 Su Bardağı,200,portakal suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_OPEN_FOOD_FACTS,1,100% juice vs nectar distinguish
+bev_028,Elma Suyu,Apple juice,İçecek,Beverage,1 Su Bardağı,200,elma suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_OPEN_FOOD_FACTS,1,100% juice vs nectar distinguish
+bev_029,Vişne Suyu,Sour cherry juice,İçecek,Beverage,1 Su Bardağı,200,vişne suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,often packaged nectar; sugar varies
+bev_030,Üzüm Suyu,Grape juice,İçecek,Beverage,1 Su Bardağı,200,üzüm suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_OPEN_FOOD_FACTS,1,100% juice vs nectar distinguish
+bev_031,Nar Suyu,Pomegranate juice,İçecek,Beverage,1 Su Bardağı,200,nar suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_OPEN_FOOD_FACTS,2,packaged/fresh can vary
+bev_032,Greyfurt Suyu,Grapefruit juice,İçecek,Beverage,1 Su Bardağı,200,greyfurt suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,basic juice
+bev_033,Havuç Suyu,Carrot juice,İçecek,Beverage,1 Su Bardağı,200,havuç suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_RECIPE,2,fresh juice values vary
+bev_034,Domates Suyu,Tomato juice,İçecek,Beverage,1 Su Bardağı,200,domates suyu,Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA_OR_OPEN_FOOD_FACTS,2,sodium differs by product
+bev_035,Limonata (Ev Yapımı),Homemade lemonade,İçecek,Beverage,1 Su Bardağı,250,"limonata, ev yapımı limonata",Vegan;Vejetaryen;Glutensiz;Laktozsuz,RECIPE,2,sugar amount varies; recipe needed
+bev_036,Limonata (Şekersiz),Unsweetened lemonade,İçecek,Beverage,1 Su Bardağı,250,şekersiz limonata,Vegan;Vejetaryen;Glutensiz;Laktozsuz,RECIPE,2,lemon+water; sweetener optional
+bev_037,Kola,Cola,İçecek,Beverage,1 Kutu,330,"kola, cola",Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,brand values vary
+bev_038,Kola Zero,Diet cola,İçecek,Beverage,1 Kutu,330,"kola zero, diet cola, şekersiz kola",Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,brand values vary
+bev_039,Gazoz,Lemon-lime soda,İçecek,Beverage,1 Şişe,250,gazoz,Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,packaged values vary
+bev_040,Soğuk Çay,Iced tea,İçecek,Beverage,1 Kutu/Şişe,330,"ice tea, soğuk çay",Vegan;Vejetaryen;Glutensiz;Laktozsuz,OPEN_FOOD_FACTS,2,sugar varies by product
+bev_041,Enerji İçeceği,Energy drink,İçecek,Beverage,1 Kutu,250,"enerji içeceği, energy drink",Vegan;Vejetaryen,OPEN_FOOD_FACTS,2,brand/caffeine/sugar varies
+bev_042,Spor İçeceği,Sports drink,İçecek,Beverage,1 Şişe,500,"spor içeceği, isotonic drink",Vegan;Vejetaryen,OPEN_FOOD_FACTS,3,brand formulation varies
+bev_043,Protein Shake (Sütlü),Protein shake with milk,İçecek,Beverage,1 Shaker,300,"protein shake, protein içeceği",Vejetaryen;Glutensiz,RECIPE_OR_MANUAL_REVIEW,3,depends on protein powder + milk
+bev_044,Protein Shake (Su ile),Protein shake with water,İçecek,Beverage,1 Shaker,300,protein shake su ile,Vejetaryen;Glutensiz,RECIPE_OR_MANUAL_REVIEW,3,depends on protein powder
+bev_045,Smoothie (Muzlu),Banana smoothie,İçecek,Beverage,1 Bardak,300,muzlu smoothie,Vejetaryen;Glutensiz,RECIPE,3,recipe needed; fruit+yogurt/milk vary
+bev_046,Smoothie (Çilekli),Strawberry smoothie,İçecek,Beverage,1 Bardak,300,çilekli smoothie,Vejetaryen;Glutensiz,RECIPE,3,recipe needed
+bev_047,Salep,Salep,İçecek,Beverage,1 Fincan,200,salep,Vejetaryen;Glutensiz,TURKOMP_OR_RECIPE,2,traditional hot drink; milk/sugar varies
+bev_048,Boza,Boza,İçecek,Beverage,1 Su Bardağı,200,boza,Vegan;Vejetaryen,TURKOMP_OR_RECIPE,2,traditional fermented drink
+bev_049,Şalgam Suyu,Turnip juice,İçecek,Beverage,1 Su Bardağı,200,"şalgam, şalgam suyu",Vegan;Vejetaryen;Glutensiz;Laktozsuz,TURKOMP_OR_OPEN_FOOD_FACTS,2,traditional fermented; packaged values vary
+bev_050,Komposto,Fruit compote drink,İçecek,Beverage,1 Kase/Bardak,200,komposto,Vegan;Vejetaryen,RECIPE,3,fruit+sugar recipe varies
+bev_051,Hoşaf,Dried fruit compote drink,İçecek,Beverage,1 Kase/Bardak,200,hoşaf,Vegan;Vejetaryen,RECIPE,3,dried fruit+sugar recipe varies
+bev_052,Kakao (Sıcak Çikolata),Hot chocolate,İçecek,Beverage,1 Fincan,200,"sıcak çikolata, kakao",Vejetaryen;Glutensiz,RECIPE_OR_OPEN_FOOD_FACTS,2,milk/cocoa/sugar varies

@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "export:catalog": "node scripts/exportNutritionCatalogFromFoodDb.mjs",
-    "match:catalog": "node scripts/matchNutritionCatalogToUsda.mjs"
+    "match:catalog": "node scripts/matchNutritionCatalogToUsda.mjs",
+    "expand:catalog": "node scripts/matchExpansionCandidatesToUsda.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

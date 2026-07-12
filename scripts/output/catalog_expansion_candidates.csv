@@ -1,0 +1,81 @@
+candidate_id,name_tr,name_en,category_tr,category_en,default_portion_label_tr,default_portion_grams,aliases_tr,tags,preferred_source,source_priority,notes
+exp_001,Yaban Mersini,Blueberries,Meyve,Fruit,1 Kase,75,"yaban mersini, blueberries",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw fresh fruit — USDA match expected
+exp_002,Misket Limonu,Lime,Meyve,Fruit,1 Adet,60,"misket limonu, lime",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw citrus — USDA match expected
+exp_003,Trabzon Hurması,Persimmon,Meyve,Fruit,1 Adet,150,"trabzon hurması, persimmon",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw fruit — USDA match expected
+exp_004,Çarkıfelek,Passion fruit,Meyve,Fruit,1 Adet,80,"çarkıfelek, passion fruit",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw tropical fruit — USDA match expected
+exp_005,Kuru İncir,Dried figs,Meyve,Fruit,1 Adet,20,"kuru incir, dried fig",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif,USDA,1,Dried fruit — verify moisture-adjusted values
+exp_006,Kuru Erik,Dried plums (prunes),Meyve,Fruit,1 Adet,10,"kuru erik, kuru kayısı benzeri",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif,USDA,1,Dried fruit — not fresh plum
+exp_007,Kızılcık,Cranberries,Meyve,Fruit,1 Kase,50,"kızılcık, cranberry",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw or dried cranberry — check preparation state
+exp_008,Kestane (Haşlanmış),Chestnuts boiled,Meyve,Fruit,1 Kase,80,"kestane, chestnut boiled",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Boiled chestnuts — seasonal Turkish snack
+exp_009,Turp,Radish,Sebze,Vegetable,1 Adet,50,"turp, radish",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw vegetable
+exp_010,Brüksel Lahanası (Haşlanmış),Brussels sprouts boiled,Sebze,Vegetable,1 Kase,80,"brüksel lahanası, brussels sprouts",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif,USDA,1,Boiled — match cooking state carefully
+exp_011,Kuşkonmaz (Haşlanmış),Asparagus boiled,Sebze,Vegetable,1 Kase,60,"kuşkonmaz, asparagus",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Boiled asparagus
+exp_012,Bakla (Taze),Fava beans fresh,Sebze,Vegetable,1 Kase,80,"bakla, taze bakla",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif,USDA,1,Fresh broad beans — not dried legume
+exp_013,Maydanoz (Taze),Parsley fresh,Sebze,Vegetable,1 Yemek Kaşığı,5,"maydanoz, parsley",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Herb garnish — per 100g reference
+exp_014,Dereotu (Taze),Dill fresh,Sebze,Vegetable,1 Yemek Kaşığı,3,"dereotu, dill",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Fresh herb
+exp_015,Kırmızı Lahana (Çiğ),Red cabbage raw,Sebze,Vegetable,1 Kase,80,"kırmızı lahana, red cabbage",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif,USDA,1,Raw red cabbage
+exp_016,Patates (Çiğ),Potato raw,Sebze,Vegetable,1 Adet,150,"patates çiğ, raw potato",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw potato — differs from boiled entry in catalog
+exp_017,Nane (Taze),Mint fresh,Sebze,Vegetable,1 Yemek Kaşığı,2,"nane, mint",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Fresh mint leaves
+exp_018,Soğan (Kuru),Onion dry,Sebze,Vegetable,1 Adet,80,"soğan kuru, dry onion",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Raw dry onion bulb
+exp_019,Ricotta Peyniri,Ricotta cheese,Süt Ürünleri,Dairy,1 Yemek Kaşığı,30,"ricotta, ricotta peyniri",Vejetaryen;Glutensiz;Yüksek Protein,USDA,1,Fresh cheese — USDA dairy match
+exp_020,Parmesan Peyniri,Parmesan cheese,Süt Ürünleri,Dairy,1 Yemek Kaşığı,10,"parmesan, parmesan peyniri",Vejetaryen;Glutensiz;Yüksek Protein;Keto,USDA,1,Hard cheese — grated reference
+exp_021,Peynir (Tulum),Tulum cheese,Süt Ürünleri,Dairy,1 Dilim,30,"tulum peyniri, tulum",Vejetaryen;Glutensiz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Turkish regional cheese — TürKomp or manual review
+exp_022,Laktozsuz Süt,Lactose-free milk,Süt Ürünleri,Dairy,1 Su Bardağı,200,"laktozsuz süt, lactose free milk",Vejetaryen;Glutensiz,OPEN_FOOD_FACTS,3,Packaged product — brand-dependent; use OFF when barcoded
+exp_023,Süt (Yağsız),Skim milk,Süt Ürünleri,Dairy,1 Su Bardağı,200,"yağsız süt, skim milk",Vejetaryen;Glutensiz,USDA,1,Fluid milk — verify fat percentage
+exp_024,Yumurta Akı,Egg white,Yumurta,Egg,1 Adet,33,"yumurta akı, egg white",Glutensiz;Laktozsuz;Yüksek Protein;Keto,USDA,1,Separated egg white
+exp_025,Yumurta Sarısı,Egg yolk,Yumurta,Egg,1 Adet,17,"yumurta sarısı, egg yolk",Glutensiz;Laktozsuz;Keto,USDA,1,Separated egg yolk
+exp_026,Uskumru (Izgara),Mackerel grilled,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,120,"uskumru, mackerel grilled",Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Grilled oily fish — cooking state review
+exp_027,Sardalya (Izgara),Sardine grilled,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,100,"sardalya, sardine",Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Small oily fish grilled
+exp_028,Mezgit (Kızartma),Whiting fried,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,120,"mezgit, whiting fried",Glutensiz;Laktozsuz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Fried fish portion — recipe or TürKomp preferred
+exp_029,Kalamar (Izgara),Calamari grilled,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,120,"kalamar, calamari",Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Grilled squid — verify preparation
+exp_030,Dana Antrikot (Izgara),Beef ribeye grilled,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,150,"antrikot, ribeye",Glutensiz;Laktozsuz;Yüksek Protein;Keto,USDA,1,Beef steak cut — differs from generic biftek
+exp_031,Hindi Budu (Fırın),Turkey leg roasted,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,150,"hindi budu, turkey leg",Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Roasted turkey leg
+exp_032,Ahtapot (Haşlanmış),Octopus boiled,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,100,"ahtapot, octopus",Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Boiled octopus
+exp_033,Köfte (Fırın),Meatballs baked,Et / Tavuk / Balık,Meat Poultry Fish,1 Porsiyon,150,"fırın köfte, baked meatballs",Glutensiz;Laktozsuz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Turkish home-style baked köfte — recipe calculation
+exp_034,Pirinç (Çiğ Beyaz),White rice raw,Tahıl / Ekmek / Makarna,Grains Bread Pasta,1 Su Bardağı,185,"çiğ pirinç, raw white rice",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Dry uncooked rice — not cooked pilav
+exp_035,Bulgur (Kuru),Bulgur dry,Tahıl / Ekmek / Makarna,Grains Bread Pasta,1 Su Bardağı,140,"kuru bulgur, dry bulgur",Vegan;Vejetaryen;Laktozsuz;Yüksek Lif,USDA,1,Dry bulgur grain — not pilav
+exp_036,Makarna (Çiğ),Pasta dry,Tahıl / Ekmek / Makarna,Grains Bread Pasta,1 Porsiyon,80,"çiğ makarna, dry pasta",Vegan;Vejetaryen;Laktozsuz,USDA,1,Dry pasta — differs from haşlanmış entry
+exp_037,İrmik (Kuru),Semolina dry,Tahıl / Ekmek / Makarna,Grains Bread Pasta,1 Su Bardağı,160,"kuru irmik, semolina",Vegan;Vejetaryen;Laktozsuz,USDA,1,Dry semolina grain
+exp_038,Yulaf Unu,Oat flour,Tahıl / Ekmek / Makarna,Grains Bread Pasta,1 Yemek Kaşığı,10,"yulaf unu, oat flour",Vegan;Vejetaryen;Yüksek Lif,USDA,1,Dry oat flour — not rolled oats
+exp_039,Mısır Unu,Corn flour,Tahıl / Ekmek / Makarna,Grains Bread Pasta,1 Yemek Kaşığı,10,"mısır unu, corn flour",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Dry corn flour
+exp_040,Mercimek (Yeşil Kuru),Green lentil dry,Baklagiller,Legumes,1 Su Bardağı,190,"yeşil mercimek kuru, green lentil dry",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif;Yüksek Protein,USDA,1,Dry legume — not haşlanmış
+exp_041,Mercimek (Kırmızı Kuru),Red lentil dry,Baklagiller,Legumes,1 Su Bardağı,190,"kırmızı mercimek kuru, red lentil dry",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif;Yüksek Protein,USDA,1,Dry red lentil
+exp_042,Barbunya (Kuru),Kidney bean dry,Baklagiller,Legumes,1 Su Bardağı,180,"kuru barbunya, dry kidney bean",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif;Yüksek Protein,USDA,1,Dry kidney bean
+exp_043,Soya Fasulyesi (Haşlanmış),Soybeans boiled,Baklagiller,Legumes,1 Kase,90,"soya fasulyesi, edamame boiled",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Boiled soybeans
+exp_044,Nohut (Kuru),Chickpea dry,Baklagiller,Legumes,1 Su Bardağı,180,"kuru nohut, dry chickpea",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Lif;Yüksek Protein,USDA,1,Dry chickpea — not haşlanmış
+exp_045,Paça Çorbası,Trotter soup,Çorba,Soup,1 Kase,250,"paça çorbası, paça",Glutensiz;Laktozsuz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Traditional Turkish soup — TürKomp or recipe
+exp_046,Lahana Çorbası,Cabbage soup,Çorba,Soup,1 Kase,250,"lahana çorbası",Vegan;Vejetaryen;Glutensiz;Laktozsuz,TURKOMP_OR_RECIPE,2,Home-style soup — recipe calculation
+exp_047,Sebze Çorbası,Mixed vegetable soup,Çorba,Soup,1 Kase,250,"sebze çorbası",Vegan;Vejetaryen;Glutensiz;Laktozsuz,TURKOMP_OR_RECIPE,2,Mixed vegetable soup — recipe
+exp_048,Balık Çorbası,Fish soup,Çorba,Soup,1 Kase,250,"balık çorbası",Glutensiz;Laktozsuz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Fish-based soup — TürKomp or recipe
+exp_049,Analı Kızlı Çorbası,Analı kızlı soup,Çorba,Soup,1 Kase,250,"analı kızlı çorbası",Glutensiz;Laktozsuz,TURKOMP_OR_RECIPE,2,Traditional Turkish soup — manual review likely
+exp_050,Çılbır,Cilbir,Türk Ev Yemekleri,Turkish Home Cooking,1 Porsiyon,200,"çılbır, cilbir",Vejetaryen;Glutensiz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Yoğurt and poached egg dish — TürKomp/recipe
+exp_051,Türlü,Mixed vegetable stew,Türk Ev Yemekleri,Turkish Home Cooking,1 Porsiyon,250,"türlü, güveç sebze",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Akdeniz,TURKOMP_OR_RECIPE,2,Home stew — recipe from ingredients
+exp_052,Sulu Köfte,Sulu köfte,Türk Ev Yemekleri,Turkish Home Cooking,1 Porsiyon,250,"sulu köfte",Glutensiz;Laktozsuz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Meatball stew — TürKomp or recipe
+exp_053,Ali Nazik,Ali nazik,Türk Ev Yemekleri,Turkish Home Cooking,1 Porsiyon,250,"ali nazik",Glutensiz;Laktozsuz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Eggplant and meat dish — TürKomp
+exp_054,Patlıcan Salatası (Közlenmiş),Roasted eggplant salad,Türk Ev Yemekleri,Turkish Home Cooking,1 Kase,120,"köz patlıcan salatası",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Akdeniz,TURKOMP_OR_RECIPE,2,Prepared salad — recipe
+exp_055,Sigara Böreği,Sigara böreği,Türk Ev Yemekleri,Turkish Home Cooking,1 Adet,40,"sigara böreği",Vejetaryen,TURKOMP_OR_RECIPE,2,Fried pastry roll — recipe
+exp_056,Su Böreği,Su böreği,Türk Ev Yemekleri,Turkish Home Cooking,1 Porsiyon,150,"su böreği",Vejetaryen,TURKOMP_OR_RECIPE,2,Layered pastry — recipe
+exp_057,Kaygana,Kaygana,Türk Ev Yemekleri,Turkish Home Cooking,1 Porsiyon,120,"kaygana",Vejetaryen,TURKOMP_OR_RECIPE,2,Flour and egg pan dish — recipe
+exp_058,Pişi,Pişi,Türk Ev Yemekleri,Turkish Home Cooking,1 Adet,60,"pişi, fried dough",Vejetaryen,TURKOMP_OR_RECIPE,2,Fried breakfast dough — recipe
+exp_059,Haydari,Haydari,Türk Ev Yemekleri,Turkish Home Cooking,1 Kase,80,"haydari",Vejetaryen;Glutensiz;Yüksek Protein;Akdeniz,TURKOMP_OR_RECIPE,2,Yogurt meze — recipe
+exp_060,Acılı Ezme,Spicy tomato dip,Türk Ev Yemekleri,Turkish Home Cooking,1 Kase,80,"acılı ezme, ezme",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Akdeniz,TURKOMP_OR_RECIPE,2,Prepared meze — recipe
+exp_061,Orman Kebabı,Orman kebabı,Türk Ev Yemekleri,Turkish Home Cooking,1 Porsiyon,250,"orman kebabı",Glutensiz;Laktozsuz;Yüksek Protein,TURKOMP_OR_RECIPE,2,Meat and vegetable stew — TürKomp
+exp_062,Gözleme (Ispanaklı),Gözleme spinach,Kahvaltılık,Breakfast,1 Adet,150,"ıspanaklı gözleme",Vejetaryen,TURKOMP_OR_RECIPE,2,Stuffed flatbread — recipe; catalog has peynirli variant
+exp_063,Reçel (Çilek),Strawberry jam,Kahvaltılık,Breakfast,1 Yemek Kaşığı,20,"çilek reçeli, strawberry jam",Vegan;Vejetaryen;Glutensiz;Laktozsuz,TURKOMP_OR_RECIPE,2,Prepared spread — recipe or TürKomp
+exp_064,Fransız Tostu,French toast,Kahvaltılık,Breakfast,1 Dilim,80,"fransız tostu, french toast",Vejetaryen,TURKOMP_OR_RECIPE,2,Egg-bread breakfast — recipe
+exp_065,Sahanda Sucuk,Sucuk pan-fried,Kahvaltılık,Breakfast,1 Porsiyon,50,"sahanda sucuk",Glutensiz;Laktozsuz;Yüksek Protein;Keto,TURKOMP_OR_RECIPE,2,Pan-fried sucuk portion — differs from sucuk raw
+exp_066,Hindistan Cevizi Yağı,Coconut oil,Yağlar,Oils & Fats,1 Yemek Kaşığı,15,"hindistan cevizi yağı, coconut oil",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Keto,USDA,1,Pure oil — USDA reference
+exp_067,Susam Yağı,Sesame oil,Yağlar,Oils & Fats,1 Yemek Kaşığı,15,"susam yağı, sesame oil",Vegan;Vejetaryen;Glutensiz;Laktozsuz,USDA,1,Pure oil
+exp_068,Margarin,Margarine,Yağlar,Oils & Fats,1 Yemek Kaşığı,15,"margarin, margarine",Vegan;Vejetaryen;Glutensiz;Laktozsuz,MANUAL_REVIEW,4,Packaged spread — brand variation high
+exp_069,Kabak Çekirdeği,Pumpkin seeds,Kuruyemiş,Nuts & Seeds,1 Kase,30,"kabak çekirdeği, pumpkin seeds",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Seeds — roasted or raw to verify
+exp_070,Susam (Kuru),Sesame seeds,Kuruyemiş,Nuts & Seeds,1 Yemek Kaşığı,10,"susam, sesame seeds",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Protein,USDA,1,Dry seeds
+exp_071,Pekan Cevizi,Pecans,Kuruyemiş,Nuts & Seeds,1 Adet,4,"pekan, pecan",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Keto;Yüksek Protein,USDA,1,Tree nut
+exp_072,Kuru Dut,Dried mulberry,Kuruyemiş,Nuts & Seeds,1 Yemek Kaşığı,15,"kuru dut",Vegan;Vejetaryen;Glutensiz;Laktozsuz,MANUAL_REVIEW,4,Traditional dried fruit snack — limited USDA coverage
+exp_073,Yer Fıstığı (Kavrulmuş Tuzsuz),Peanuts roasted unsalted,Kuruyemiş,Nuts & Seeds,1 Kase,30,"yer fıstığı kavrulmuş, peanut roasted",Vegan;Vejetaryen;Glutensiz;Laktozsuz;Yüksek Protein;Keto,USDA,1,Roasted peanuts — verify salt/oil state
+exp_074,Salep,Salep,İçecek,Beverage,1 Fincan,200,"salep",Vejetaryen;Glutensiz,TURKOMP_OR_RECIPE,2,Traditional hot drink — TürKomp or recipe
+exp_075,Boza,Boza,İçecek,Beverage,1 Su Bardağı,200,"boza",Vejetaryen,TURKOMP_OR_RECIPE,2,Fermented drink — TürKomp
+exp_076,Şalgam Suyu,Turnip juice,İçecek,Beverage,1 Su Bardağı,200,"şalgam suyu, şalgam",Vegan;Vejetaryen;Glutensiz;Laktozsuz,TURKOMP_OR_RECIPE,2,Traditional fermented beverage — TürKomp
+exp_077,Limonata (Ev Yapımı),Homemade lemonade,İçecek,Beverage,1 Su Bardağı,250,"limonata ev yapımı",Vegan;Vejetaryen;Glutensiz;Laktozsuz,TURKOMP_OR_RECIPE,2,Prepared drink — recipe from lemon and sugar
+exp_078,Ihlamur Çayı,Linden tea,İçecek,Beverage,1 Fincan,200,"ıhlamur çayı, linden tea",Vegan;Vejetaryen;Glutensiz;Laktozsuz,MANUAL_REVIEW,4,Herbal infusion — weak USDA coverage
+exp_079,Galeta,Cracker,Atıştırmalık,Snack,1 Adet,5,"galeta, cracker",Vejetaryen,USDA,1,Plain cracker — generic not branded
+exp_080,Kurabiye (Ev Yapımı),Homemade cookie,Atıştırmalık,Snack,1 Adet,25,"ev yapımı kurabiye, cookie",Vejetaryen,TURKOMP_OR_RECIPE,2,Baked snack — recipe calculation

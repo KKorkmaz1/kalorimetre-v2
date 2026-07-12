@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useDiet } from '../context/DietContext'
-import { MEAL_TYPES, checkHealthImpact, calcPreview, parseQuantity, unitNeedsGramInput } from './Meal/foodData'
+import { MEAL_TYPES, checkHealthImpact, calcPreview, parseQuantity, unitNeedsGramInput, FOOD_DB } from './Meal/foodData'
 import { searchFoodsLocal } from '../services/foodService'
 import { PlusIcon, CloseIcon } from './Meal/MealIcons'
 import SearchBar from './Meal/SearchBar'
 import BasketItem from './Meal/BasketItem'
+import BarcodeTab from './Meal/BarcodeTab'
 import MacroSummary from './Meal/MacroSummary'
 import BarcodeScanner from './BarcodeScanner'
-import { parseMealTextWithAI, getHealthyAlternatives, estimatePortionWeight } from '../services/aiService'
+import { parseMealTextWithAI, getHealthierAlternatives, estimatePortionWeight } from '../services/aiService'
 import { supabase } from '../utils/supabaseClient'
 import { lookupBarcode } from '../utils/openFoodFacts'
 
@@ -39,6 +40,18 @@ function isServingValid(unit, qty, gramsPerUnit) {
   if (unit === 'gram') return true
   const gpu = parseQuantity(gramsPerUnit)
   return Number.isFinite(gpu) && gpu > 0
+}
+
+function buildAlternativesCacheKey(selFood, basket, profile, mealType) {
+  const foodKey = selFood?.id
+    ?? `basket:${basket.map(b => `${b.foodId ?? b.foodName}`).join('|')}`
+  const goalKey = profile?.primaryGoal ?? profile?.goal ?? 'default'
+  const profileKey = [
+    ...(profile?.healthConditions ?? []),
+    ...(profile?.allergies ?? []),
+    profile?.dietPhilosophy ?? '',
+  ].sort().join('|')
+  return `${foodKey}::${goalKey}::${profileKey}::${mealType}`
 }
 
 function macrosFrom100g(values, totalGrams) {
@@ -130,7 +143,6 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
 
   // Barcode sub-state
   const [scannerOpen,         setScannerOpen]         = useState(false)
-  const [barcodeOpen,         setBarcodeOpen]         = useState(false)
   const [barcodeInput,        setBarcodeInput]        = useState('')
   const [barcodeLoading,      setBarcodeLoading]      = useState(false)
   const [barcodeError,        setBarcodeError]        = useState('')
@@ -178,19 +190,28 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   const [aiSaveIdx,   setAiSaveIdx]   = useState(null) // index of item being saved
   const [aiSaveName,  setAiSaveName]  = useState('')
 
-  // AI healthy alternatives
-  const [aiAlternatives,       setAiAlternatives]       = useState([])
-  const [alternativesLoading,  setAlternativesLoading]  = useState(false)
+  // AI smart recommendations (lazy-loaded, cached)
+  const EMPTY_RECOMMENDATIONS = { healthier: [], similar: [], menus: [] }
+  const [aiRecommendations,       setAiRecommendations]       = useState(EMPTY_RECOMMENDATIONS)
+  const [alternativesLoading,     setAlternativesLoading]     = useState(false)
+  const [alternativesExpanded,    setAlternativesExpanded]    = useState(false)
+  const [alternativesError,       setAlternativesError]       = useState('')
+  const [alternativesUsedFallback,setAlternativesUsedFallback]= useState(false)
+  const alternativesCache = useRef(new Map())
+  const alternativesRequestId = useRef(0)
+  const alternativesRefreshCounter = useRef(0)
+  const alternativesShownHistory = useRef({ ids: [], names: [], menuIds: [] })
   const [savedPortionLoading,  setSavedPortionLoading]  = useState({})
   const [savedPortionAiHint,   setSavedPortionAiHint]   = useState({})
 
   const searchPortionRequestId = useRef(0)
   const barcodePortionRequestId = useRef(0)
   const unknownPortionRequestId = useRef(0)
-  const searchRequestId = useRef(0)
 
-  const [searchResults, setSearchResults] = useState([])
-  const [searchLoading, setSearchLoading] = useState(false)
+  const searchResults = useMemo(
+    () => (isOpen ? searchFoodsLocal(query) : []),
+    [isOpen, query],
+  )
 
   // Reset search UI whenever the modal opens (query may already be "" after close)
   useEffect(() => {
@@ -203,49 +224,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setGramsPerUnit('')
     setSearchPortionLoading(false)
     setSearchPortionAiHint(false)
-    setSearchLoading(false)
   }, [isOpen])
-
-  // Local clean catalog search with debounce and race-condition guard
-  useEffect(() => {
-    if (!isOpen) return
-
-    const requestId = ++searchRequestId.current
-
-    async function applyResults(results) {
-      if (searchRequestId.current !== requestId) return
-      setSearchResults(results)
-      setSearchLoading(false)
-    }
-
-    if (!query.trim()) {
-      setSearchLoading(false)
-      searchFoodsLocal('')
-        .then(applyResults)
-        .catch(err => {
-          console.error('[AddMealModal] search error:', err)
-          if (searchRequestId.current !== requestId) return
-          setSearchResults([])
-          setSearchLoading(false)
-        })
-      return
-    }
-
-    setSearchLoading(true)
-    const timer = setTimeout(async () => {
-      try {
-        const results = await searchFoodsLocal(query)
-        await applyResults(results)
-      } catch (err) {
-        console.error('[AddMealModal] search error:', err)
-        if (searchRequestId.current !== requestId) return
-        setSearchResults([])
-        setSearchLoading(false)
-      }
-    }, 200)
-
-    return () => clearTimeout(timer)
-  }, [query, isOpen])
 
   const preview = useMemo(
     () => calcPreview(selFood, selUnit, qty, gramsPerUnit),
@@ -263,30 +242,123 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
 
   const healthImpact = useMemo(() => checkHealthImpact(basket, profile), [basket, profile])
 
-  // Fetch AI alternatives when basket changes (keep prior results while loading to avoid flash)
+  const alternativesContextKey = useMemo(
+    () => buildAlternativesCacheKey(selFood, basket, profile, mealType),
+    [selFood?.id, basket, profile, mealType],
+  )
+
+  // Clear visible recommendations when context changes (no auto AI call)
   useEffect(() => {
-    if (!isOpen || basket.length === 0) {
-      setAiAlternatives([])
-      setAlternativesLoading(false)
-      return
+    if (!isOpen) return
+    setAiRecommendations(EMPTY_RECOMMENDATIONS)
+    setAlternativesError('')
+    setAlternativesUsedFallback(false)
+    alternativesShownHistory.current = { ids: [], names: [], menuIds: [] }
+  }, [alternativesContextKey, isOpen])
+
+  function mergeShownHistory(recs) {
+    const prev = alternativesShownHistory.current
+    const foodIds = [...recs.healthier, ...recs.similar].map(f => f.id)
+    const foodNames = [...recs.healthier, ...recs.similar].map(f => f.name)
+    const menuIds = (recs.menus ?? []).map(m => m.id)
+    alternativesShownHistory.current = {
+      ids: [...new Set([...prev.ids, ...foodIds])],
+      names: [...new Set([...prev.names, ...foodNames])],
+      menuIds: [...new Set([...prev.menuIds, ...menuIds])],
     }
-    let cancelled = false
-    setAlternativesLoading(true)
-    const timer = setTimeout(async () => {
-      try {
-        const alts = await getHealthyAlternatives(basket)
-        if (!cancelled) setAiAlternatives(alts)
-      } catch (err) {
-        console.log('[AddMealModal] getHealthyAlternatives failed:', err)
-      } finally {
-        if (!cancelled) setAlternativesLoading(false)
+  }
+
+  async function loadAlternatives({ forceRefresh = false } = {}) {
+    if (!selFood && basket.length === 0) return
+
+    const cacheKey = alternativesContextKey
+    const history = alternativesShownHistory.current
+
+    if (forceRefresh) {
+      alternativesCache.current.delete(cacheKey)
+      alternativesRefreshCounter.current += 1
+      if (import.meta.env.DEV) {
+        console.log('[alternatives] force refresh', {
+          cacheKey,
+          refreshCount: alternativesRefreshCounter.current,
+          excludedIds: history.ids,
+          excludedNames: history.names,
+        })
       }
-    }, 500)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
+    } else {
+      const cached = alternativesCache.current.get(cacheKey)
+      if (cached) {
+        if (import.meta.env.DEV) {
+          console.log('[alternatives] using cache', {
+            cacheKey,
+            recommendations: cached.recommendations,
+          })
+        }
+        setAiRecommendations(cached.recommendations ?? EMPTY_RECOMMENDATIONS)
+        setAlternativesUsedFallback(cached.usedFallback)
+        setAlternativesError(cached.error ?? '')
+        return
+      }
     }
-  }, [basket, isOpen])
+
+    const requestId = ++alternativesRequestId.current
+    setAlternativesLoading(true)
+    setAlternativesError('')
+
+    try {
+      const result = await getHealthierAlternatives({
+        selectedFood: selFood,
+        basketItems: basket,
+        mealType,
+        userProfile: profile,
+        goals: { primaryGoal: profile?.primaryGoal ?? profile?.goal },
+        localCatalog: FOOD_DB,
+        forceRefresh,
+        excludedSuggestionIds: forceRefresh
+          ? [...history.ids, ...history.menuIds]
+          : [],
+        excludedSuggestionNames: forceRefresh ? history.names : [],
+      })
+      if (alternativesRequestId.current !== requestId) return
+
+      const recs = result.recommendations ?? EMPTY_RECOMMENDATIONS
+
+      if (!forceRefresh || !result.usedFallback) {
+        alternativesCache.current.set(cacheKey, result)
+      }
+
+      setAiRecommendations(recs)
+      setAlternativesUsedFallback(result.usedFallback)
+      setAlternativesError(result.error ?? '')
+      mergeShownHistory(recs)
+
+      if (import.meta.env.DEV) {
+        console.log('[alternatives] loaded', {
+          forceRefresh,
+          aiCalled: result.aiCalled,
+          usedFallback: result.usedFallback,
+          recommendations: recs,
+        })
+      }
+    } catch (err) {
+      if (alternativesRequestId.current !== requestId) return
+      console.error('[AddMealModal] getHealthierAlternatives failed:', err)
+      setAlternativesError('YZ önerisi alınamadı, yerel öneriler gösteriliyor.')
+      setAiRecommendations(EMPTY_RECOMMENDATIONS)
+    } finally {
+      if (alternativesRequestId.current === requestId) setAlternativesLoading(false)
+    }
+  }
+
+  function handleToggleAlternatives() {
+    const next = !alternativesExpanded
+    setAlternativesExpanded(next)
+    if (next) loadAlternatives()
+  }
+
+  function handleRefreshAlternatives() {
+    loadAlternatives({ forceRefresh: true })
+  }
 
   async function runSearchPortionEstimate(foodName, unit) {
     if (!foodName?.trim() || unit === 'Gram' || unit === 'Mililitre') {
@@ -420,11 +492,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     const code = (codeOverride ?? barcodeInput).trim()
     if (!code) { setBarcodeError('Barkod numarası giriniz.'); return }
     setBarcodeInput(code)
+    setTab('barcode')
     setBarcodeLoading(true)
     setBarcodeError('')
     setBarcodeProduct(null)
     setBarcodeUnknown(false)
-    setBarcodeOpen(true)
     try {
       const result = await lookupBarcode(code)
       if (!result.found) {
@@ -450,6 +522,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   }
 
   function openBarcodeScanner() {
+    setTab('barcode')
     setScannerOpen(true)
     setBarcodeError('')
   }
@@ -482,7 +555,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setUnknownName(''); setUnknownKcal100(''); setUnknownProt100(''); setUnknownCarb100('')
     setUnknownFat100(''); setUnknownFib100(''); setUnknownSug100('')
     setUnknownUnit('gram'); setUnknownQty('100'); setUnknownGramsPerUnit('')
-    setBarcodeUnknown(false); setBarcodeOpen(false); setBarcodeInput('')
+    setBarcodeUnknown(false); setBarcodeInput('')
     setError('')
   }
 
@@ -502,7 +575,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
       qty:      1,
       ...macros,
     }])
-    setBarcodeOpen(false); setBarcodeInput(''); setBarcodeProduct(null)
+    setBarcodeInput(''); setBarcodeProduct(null)
     setBarcodeQty('100'); setBarcodeUnit('gram'); setBarcodeGramsPerUnit(''); setBarcodeError('')
     setShowSaveForm(false); setSaveNickname('')
   }
@@ -820,6 +893,74 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     }
   }
 
+  function handleSelectFood(food) {
+    if (!food) return
+    setSelFood(food)
+    const firstUnit = Object.keys(food.units || {})[0] || 'Gram'
+    setSelUnit(firstUnit)
+    if (firstUnit === 'Gram' || firstUnit === 'Mililitre') {
+      setQty('100')
+      setGramsPerUnit('')
+    } else {
+      setQty('1')
+      const mult = food.units?.[firstUnit]
+      setGramsPerUnit(mult != null ? String(Math.round(mult * 100)) : '')
+    }
+    setQuery('')
+    setSearchPortionLoading(false)
+    setSearchPortionAiHint(false)
+    setError('')
+    if (firstUnit !== 'Gram' && firstUnit !== 'Mililitre' && food.units?.[firstUnit] == null) {
+      runSearchPortionEstimate(food.name, firstUnit)
+    }
+  }
+
+  function menuItemToBasketItem(menuItem) {
+    const food = FOOD_DB.find(f => f.id === menuItem.foodId)
+    if (!food) return null
+    const unitName = menuItem.unit && food.units?.[menuItem.unit]
+      ? menuItem.unit
+      : Object.keys(food.units || {})[0] || 'Gram'
+    const qty = String(menuItem.qty ?? (unitName === 'Gram' || unitName === 'Mililitre' ? 100 : 1))
+    const preview = calcPreview(food, unitName, qty)
+    if (!preview || preview.kcal <= 0) return null
+    return {
+      id:       crypto.randomUUID(),
+      foodId:   food.id,
+      foodName: food.name,
+      unit:     unitName,
+      qty:      Number(qty),
+      kcal:     preview.kcal,
+      protein:  preview.protein,
+      carbs:    preview.carbs,
+      fat:      preview.fat,
+      fiber:    0,
+      sugar:    0,
+    }
+  }
+
+  function handleAddMenuToBasket(menu) {
+    const items = (menu.items ?? [])
+      .map(menuItemToBasketItem)
+      .filter(Boolean)
+    if (items.length === 0) {
+      setError('Menü öğeleri katalogda bulunamadı.')
+      return
+    }
+    setBasket(prev => [...prev, ...items])
+    setError('')
+  }
+
+  function handleSelectAlternative(alt) {
+    const food = FOOD_DB.find(f => f.id === alt.id)
+    if (!food) {
+      console.warn('[AddMealModal] Alternative not found in catalog:', alt.id, alt.name)
+      return
+    }
+    if (tab !== 'search') setTab('search')
+    handleSelectFood(food)
+  }
+
   function aiAlternativeToBasketItem(alt) {
     return {
       id:       crypto.randomUUID(),
@@ -962,12 +1103,10 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
   function resetAll() {
     setBasket([]); setMealLabel(''); setMealType('Öğle'); setTab('search')
     setQuery(''); setSelFood(null); setSelUnit(''); setQty('1'); setGramsPerUnit('')
-    setSearchResults([]); setSearchLoading(false)
-    searchRequestId.current += 1
     setSearchPortionLoading(false); setSearchPortionAiHint(false)
     setMName(''); setMKcal(''); setMProt(''); setMCarb(''); setMFat('')
     setMFib(''); setMSug(''); setError('')
-    setScannerOpen(false); setBarcodeOpen(false); setBarcodeInput(''); setBarcodeLoading(false)
+    setScannerOpen(false); setBarcodeInput(''); setBarcodeLoading(false)
     setBarcodeError(''); setBarcodeProduct(null); setBarcodeQty('100'); setBarcodeUnit('gram')
     setBarcodeGramsPerUnit(''); setBarcodePackageGrams(null); setBarcodeUnknown(false)
     setBarcodePortionLoading(false); setBarcodePortionAiHint(false)
@@ -979,20 +1118,32 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
     setEditingFoodId(null); setEditFields({})
     setAiText(''); setAiLoading(false); setAiResults([]); setAiError('')
     setAiGrams({}); setAiSaveIdx(null); setAiSaveName('')
-    setAiAlternatives([]); setAlternativesLoading(false)
+    setAiRecommendations(EMPTY_RECOMMENDATIONS); setAlternativesLoading(false)
+    setAlternativesExpanded(false); setAlternativesError(''); setAlternativesUsedFallback(false)
     setSavedPortionLoading({}); setSavedPortionAiHint({})
     setSavedMenus([]); setSavingMenuId(null)
   }
 
+  function handleModalClose() {
+    resetAll()
+    onClose()
+  }
+
+  // List-only nested scroll; when a food is selected the main pane scrolls instead
+  const searchResultsMode = tab === 'search' && !selFood
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
-      onClick={e => { if (e.target === e.currentTarget) { resetAll(); onClose() } }}
+      onClick={e => { if (e.target === e.currentTarget) handleModalClose() }}
       aria-modal="true" role="dialog"
     >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { resetAll(); onClose() }} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleModalClose} />
 
-      <div className="relative flex max-h-[94vh] min-h-0 w-full max-w-app flex-col rounded-t-3xl bg-white dark:bg-night-card shadow-2xl">
+      <div
+        className="relative flex max-h-[90vh] min-h-0 w-full max-w-app flex-col overflow-hidden rounded-t-3xl bg-white dark:bg-night-card shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
 
         {/* ── FIXED HEADER ── */}
         <div className="flex-shrink-0 px-5 pt-3 pb-0">
@@ -1012,8 +1163,9 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
             </div>
             <button
               type="button"
-              onClick={() => { resetAll(); onClose() }}
+              onClick={e => { e.stopPropagation(); handleModalClose() }}
               className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-slate-100 dark:bg-night-muted text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-night-border"
+              aria-label="Modalı kapat"
             >
               <CloseIcon />
             </button>
@@ -1049,11 +1201,12 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
           {/* Sub-tab bar */}
           <div className="flex overflow-x-auto rounded-2xl bg-slate-100 dark:bg-night-muted p-1 gap-0.5">
             {[
-              { id: 'search', label: '🔍 Gıda Ara' },
-              { id: 'ai',     label: '🤖 YZ ile' },
-              { id: 'manual', label: '✍️ Manuel' },
-              { id: 'saved',  label: '⭐ Kayıtlı' },
-              { id: 'menus',  label: '📋 Kaydedilen Menüler' },
+              { id: 'search',  label: '🔍 Gıda Ara' },
+              { id: 'barcode', label: '📷 Barkod' },
+              { id: 'ai',      label: '🤖 YZ ile' },
+              { id: 'manual',  label: '✍️ Manuel' },
+              { id: 'saved',   label: '⭐ Kayıtlı' },
+              { id: 'menus',   label: '📋 Menüler' },
             ].map(({ id, label }) => (
               <button
                 key={id}
@@ -1072,397 +1225,37 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         </div>
 
         {/* ── SCROLLABLE CONTENT ── */}
-        <div className={`flex min-h-0 flex-1 flex-col px-5 py-3 ${tab === 'search' ? 'overflow-hidden' : 'overflow-y-auto space-y-3'}`}>
+        <div
+          className={`min-h-0 flex-1 px-5 py-3 ${
+            searchResultsMode
+              ? 'flex flex-col overflow-hidden'
+              : 'overflow-y-auto overscroll-contain space-y-3 pb-4'
+          }`}
+        >
 
           {/* ═══ SEARCH TAB ═══ */}
           {tab === 'search' && (
-            <div className="flex min-h-0 flex-1 flex-col gap-3">
-              {basket.length > 0 && (alternativesLoading || aiAlternatives.length > 0) && (
+            <div className={searchResultsMode ? 'flex min-h-0 flex-1 flex-col gap-3' : 'flex flex-col gap-3'}>
+              {(selFood || basket.length > 0) && (
                 <div className="flex-shrink-0">
                   <MacroSummary
                     mode="alternatives"
-                    alternatives={aiAlternatives}
+                    recommendations={aiRecommendations}
                     alternativesLoading={alternativesLoading}
-                    onAddAlternative={addAlternativeToBasket}
+                    alternativesExpanded={alternativesExpanded}
+                    onToggleAlternatives={handleToggleAlternatives}
+                    onRefreshAlternatives={handleRefreshAlternatives}
+                    alternativesError={alternativesError}
+                    alternativesUsedFallback={alternativesUsedFallback}
+                    onSelectAlternative={handleSelectAlternative}
                     onSaveAlternative={handleSaveAlternativeMenu}
+                    onAddMenuToBasket={handleAddMenuToBasket}
                     savingMenuId={savingMenuId}
                   />
                 </div>
               )}
 
-              {/* Barkod header row: camera scan + manual input */}
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openBarcodeScanner}
-                  className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/10 py-3.5 text-xs font-extrabold text-emerald-700 dark:text-emerald-400 transition-all hover:border-emerald-400 active:scale-[0.98] shadow-sm shadow-emerald-500/10"
-                >
-                  <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-                    <circle cx="12" cy="13" r="4" />
-                  </svg>
-                  <span>Barkod Okut</span>
-                </button>
-                {/* Quick barcode text input always visible */}
-                <div className="flex flex-1 items-center gap-1.5 rounded-2xl border-2 border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2.5 focus-within:border-emerald-400 transition-all">
-                  <svg className="h-4 w-4 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 17.25h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
-                  </svg>
-                  <input
-                    type="text" inputMode="numeric"
-                    value={barcodeInput}
-                    onChange={e => { setBarcodeInput(e.target.value); setBarcodeError('') }}
-                    onKeyDown={e => { if (e.key === 'Enter') handleFetchBarcode() }}
-                    placeholder="Barkod no…"
-                    className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
-                  />
-                  {barcodeInput && (
-                    <button type="button" onClick={() => handleFetchBarcode()}
-                      disabled={barcodeLoading}
-                      className="flex-shrink-0 cursor-pointer rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-extrabold text-white hover:bg-emerald-600 disabled:opacity-60">
-                      {barcodeLoading ? '…' : 'Git'}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Barcode expanded panel */}
-              {barcodeOpen && (
-                <div className="max-h-52 flex-shrink-0 overflow-y-auto rounded-2xl border border-slate-200 dark:border-night-border bg-slate-50 dark:bg-night-muted p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Barkod Sorgulama</p>
-                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 text-[9px] font-extrabold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
-                      OpenFoodFacts
-                    </span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input type="text" inputMode="numeric"
-                      value={barcodeInput}
-                      onChange={e => { setBarcodeInput(e.target.value); setBarcodeError('') }}
-                      onKeyDown={e => e.key === 'Enter' && handleFetchBarcode()}
-                      placeholder="örn. 8690526430031"
-                      className="flex-1 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-night-muted focus:border-emerald-400" />
-                    <button type="button" onClick={handleFetchBarcode} disabled={barcodeLoading}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60">
-                      {barcodeLoading
-                        ? <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                        : 'Sorgula'}
-                    </button>
-                  </div>
-
-                  {/* Connection / validation error */}
-                  {barcodeError && !barcodeUnknown && (
-                    <p className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
-                      <span>❌</span> {barcodeError}
-                    </p>
-                  )}
-
-                  {/* ── Unknown product — inline manual entry form ── */}
-                  {barcodeUnknown && (
-                    <div className="rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-900/10 p-3 space-y-3">
-
-                      {/* Header */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg leading-none">❓</span>
-                        <div>
-                          <p className="text-sm font-extrabold text-amber-800 dark:text-amber-300">Bilinmeyen Ürün — Manuel Ekle</p>
-                          <p className="text-[10px] text-amber-600 dark:text-amber-500">Barkod veritabanında bulunamadı. Bilgileri kendiniz girin.</p>
-                        </div>
-                      </div>
-
-                      {/* Nickname input — drives smart serving units */}
-                      <input
-                        type="text"
-                        value={unknownName}
-                        onChange={e => { setUnknownName(e.target.value); setError('') }}
-                        placeholder="Ürün / Takma ad (örn. Kırmızı şekersiz çikolata)"
-                        className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-amber-500"
-                      />
-
-                      {/* Per-100g macro inputs */}
-                      <div>
-                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">Değerler 100g Başına</p>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {[
-                            { val: unknownKcal100, set: setUnknownKcal100, label: 'Kalori *', color: 'text-emerald-600 dark:text-emerald-400', focus: 'focus-within:border-emerald-400' },
-                            { val: unknownProt100, set: setUnknownProt100, label: 'Protein',  color: 'text-indigo-600 dark:text-indigo-400',  focus: 'focus-within:border-indigo-400'  },
-                            { val: unknownCarb100, set: setUnknownCarb100, label: 'Karb',     color: 'text-amber-600 dark:text-amber-400',    focus: 'focus-within:border-amber-400'   },
-                            { val: unknownFat100,  set: setUnknownFat100,  label: 'Yağ',      color: 'text-rose-500 dark:text-rose-400',      focus: 'focus-within:border-rose-400'    },
-                            { val: unknownFib100,  set: setUnknownFib100,  label: 'Lif',      color: 'text-teal-600 dark:text-teal-400',      focus: 'focus-within:border-teal-400'    },
-                            { val: unknownSug100,  set: setUnknownSug100,  label: 'Şeker',    color: 'text-pink-600 dark:text-pink-400',      focus: 'focus-within:border-pink-400'    },
-                          ].map(({ val, set, label, color, focus }) => (
-                            <div key={label} className={`rounded-xl border-2 border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-2 py-2 text-center transition-all ${focus}`}>
-                              <label className={`block text-[9px] font-bold ${color}`}>{label}</label>
-                              <input
-                                type="number" inputMode="decimal" min="0"
-                                value={val}
-                                onChange={e => { set(e.target.value); setError('') }}
-                                placeholder="0"
-                                className="mt-0.5 w-full bg-transparent text-center text-base font-extrabold text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-200 dark:placeholder:text-night-muted"
-                              />
-                              <span className="text-[9px] text-slate-400">{label === 'Kalori *' ? 'kcal' : 'g'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Serving size input */}
-                      <div>
-                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Porsiyon Büyüklüğü</p>
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {SERVING_UNITS.map(u => (
-                            <button key={u.id} type="button"
-                              onClick={() => {
-                                setUnknownUnit(u.id)
-                                setUnknownGramsPerUnit('')
-                                setUnknownPortionAiHint(false)
-                                if (u.id === 'gram') setUnknownQty('100')
-                                else setUnknownQty('1')
-                                if (u.id !== 'gram') runUnknownPortionEstimate(unknownName, u.id)
-                              }}
-                              className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
-                                unknownUnit === u.id
-                                  ? 'bg-amber-500 text-white shadow-sm'
-                                  : 'bg-white dark:bg-night-border text-slate-600 dark:text-slate-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
-                              }`}>
-                              {u.label}
-                            </button>
-                          ))}
-                        </div>
-                        {unknownUnit !== 'gram' && (
-                          <div className="mb-2">
-                            <label className="mb-1 block text-[10px] font-bold text-amber-700 dark:text-amber-400">
-                              1 {getUnitLabel(unknownUnit)} kaç gram? *
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <div className="relative">
-                                <input
-                                  type="text" inputMode="decimal"
-                                  disabled={unknownPortionLoading}
-                                  value={unknownPortionLoading ? '' : unknownGramsPerUnit}
-                                  onChange={e => { setUnknownGramsPerUnit(e.target.value); setUnknownPortionAiHint(false); setError('') }}
-                                  placeholder={unknownPortionLoading ? 'YZ Hesaplanıyor...' : 'örn. 30'}
-                                  className="w-24 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-amber-500 disabled:opacity-70 disabled:cursor-wait dark:disabled:bg-night-muted"
-                                />
-                                {unknownPortionLoading && (
-                                  <svg className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-amber-500" viewBox="0 0 24 24" fill="none">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
-                            </div>
-                            {unknownPortionAiHint && !unknownPortionLoading && (
-                              <p className="mt-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                                ✨ YZ ile otomatik hesaplandı
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number" inputMode="decimal" min="0.1" step="0.5"
-                            value={unknownQty}
-                            onChange={e => { setUnknownQty(e.target.value); setError('') }}
-                            className="w-20 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-amber-400"
-                          />
-                          <span className="text-xs text-slate-400 dark:text-slate-500">
-                            {unknownUnit === 'gram' ? 'gram' : getUnitLabel(unknownUnit)}
-                          </span>
-                          {isServingValid(unknownUnit, unknownQty, unknownGramsPerUnit) && (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                              ≈ {calcTotalGrams(unknownUnit, unknownQty, unknownGramsPerUnit)}g
-                            </span>
-                          )}
-                          <button type="button" onClick={addUnknownToBasket}
-                            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-amber-600 active:scale-95">
-                            <PlusIcon />
-                            Sepete Ekle
-                            {unknownKcal100 && isServingValid(unknownUnit, unknownQty, unknownGramsPerUnit) && Number(unknownKcal100) > 0
-                              ? ` · ${macrosFrom100g({ kcal100: Number(unknownKcal100), protein100: 0, carbs100: 0, fat100: 0 }, calcTotalGrams(unknownUnit, unknownQty, unknownGramsPerUnit)).kcal} kcal`
-                              : ''}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {barcodeProduct && (
-                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-night-card p-3 space-y-3">
-                      {/* Product header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100 leading-tight">{barcodeProduct.name}</p>
-                          <p className="mt-0.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">100g başına değerler</p>
-                        </div>
-                        <span className="flex-shrink-0 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
-                          {barcodeProduct.kcal100} kcal
-                        </span>
-                      </div>
-
-                      {/* Macro chips */}
-                      <div className="grid grid-cols-5 gap-1 text-center">
-                        {[
-                          { label: 'Protein', val: barcodeProduct.protein100, color: 'text-indigo-600 dark:text-indigo-400' },
-                          { label: 'Karb',    val: barcodeProduct.carbs100,   color: 'text-amber-600 dark:text-amber-400'  },
-                          { label: 'Yağ',     val: barcodeProduct.fat100,     color: 'text-rose-500 dark:text-rose-400'    },
-                          { label: 'Lif',     val: barcodeProduct.fiber100,   color: 'text-teal-600 dark:text-teal-400'    },
-                          { label: 'Şeker',   val: barcodeProduct.sugar100,   color: 'text-pink-600 dark:text-pink-400'    },
-                        ].map(({ label, val, color }) => (
-                          <div key={label} className="rounded-lg bg-slate-50 dark:bg-night-muted px-1 py-1.5">
-                            <p className={`text-[9px] font-bold ${color}`}>{label}</p>
-                            <p className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100">{val}g</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Serving unit selector */}
-                      <div>
-                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Porsiyon Büyüklüğü</p>
-                        {barcodePackageGrams && (
-                          <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5">
-                            <span className="text-sm">📦</span>
-                            <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                              Paket ağırlığı: <span className="font-extrabold">{barcodePackageGrams}g</span>
-                            </p>
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {barcodePackageGrams && (
-                            <button type="button"
-                              onClick={() => {
-                                setBarcodeUnit('paket')
-                                setBarcodeGramsPerUnit(String(barcodePackageGrams))
-                                setBarcodeQty('1')
-                              }}
-                              className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
-                                barcodeUnit === 'paket'
-                                  ? 'bg-emerald-500 text-white shadow-sm ring-2 ring-emerald-300'
-                                  : 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100'
-                              }`}>
-                              📦 Paket
-                            </button>
-                          )}
-                          {SERVING_UNITS.map(u => (
-                            <button key={u.id} type="button"
-                              onClick={() => {
-                                setBarcodeUnit(u.id)
-                                setBarcodeGramsPerUnit('')
-                                setBarcodePortionAiHint(false)
-                                if (u.id === 'gram') setBarcodeQty('100')
-                                else setBarcodeQty('1')
-                                if (barcodeProduct && u.id !== 'gram' && u.id !== 'paket') {
-                                  runBarcodePortionEstimate(barcodeProduct.name, u.id)
-                                }
-                              }}
-                              className={`cursor-pointer rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
-                                barcodeUnit === u.id
-                                  ? 'bg-emerald-500 text-white shadow-sm'
-                                  : 'bg-slate-100 dark:bg-night-border text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-                              }`}>
-                              {u.label}
-                            </button>
-                          ))}
-                        </div>
-                        {barcodeUnit !== 'gram' && (
-                          <div className="mb-2">
-                            <label className="mb-1 block text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                              1 {barcodeUnit === 'paket' ? 'Paket' : getUnitLabel(barcodeUnit)} kaç gram? *
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <div className="relative">
-                                <input
-                                  type="text" inputMode="decimal"
-                                  disabled={barcodePortionLoading}
-                                  value={barcodePortionLoading ? '' : barcodeGramsPerUnit}
-                                  onChange={e => { setBarcodeGramsPerUnit(e.target.value); setBarcodePortionAiHint(false); setError('') }}
-                                  placeholder={barcodePortionLoading ? 'YZ Hesaplanıyor...' : 'örn. 30'}
-                                  className="w-24 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-500 disabled:opacity-70 disabled:cursor-wait dark:disabled:bg-night-muted"
-                                />
-                                {barcodePortionLoading && (
-                                  <svg className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-emerald-500" viewBox="0 0 24 24" fill="none">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
-                            </div>
-                            {barcodePortionAiHint && !barcodePortionLoading && (
-                              <p className="mt-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                                ✨ YZ ile otomatik hesaplandı
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <input type="number" inputMode="decimal" min="0.1" step="0.5"
-                            value={barcodeQty}
-                            onChange={e => { setBarcodeQty(e.target.value); setError('') }}
-                            className="w-20 rounded-xl border border-slate-200 dark:border-night-border bg-white dark:bg-night-card px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none text-center focus:border-emerald-400" />
-                          <span className="text-xs text-slate-400 dark:text-slate-500">
-                            {barcodeUnit === 'gram' ? 'gram' : barcodeUnit === 'paket' ? 'Paket' : getUnitLabel(barcodeUnit)}
-                          </span>
-                          {isServingValid(barcodeUnit, barcodeQty, barcodeGramsPerUnit) && (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                              ≈ {calcTotalGrams(barcodeUnit, barcodeQty, barcodeGramsPerUnit)}g
-                            </span>
-                          )}
-                          <button type="button" onClick={addBarcodeToBasket}
-                            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95">
-                            <PlusIcon />
-                            Sepete Ekle
-                            {isServingValid(barcodeUnit, barcodeQty, barcodeGramsPerUnit)
-                              ? ` · ${macrosFrom100g(barcodeProduct, calcTotalGrams(barcodeUnit, barcodeQty, barcodeGramsPerUnit)).kcal} kcal`
-                              : ''}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Save to favorites */}
-                      <div className="border-t border-slate-100 dark:border-night-border pt-2.5">
-                        {!showSaveForm ? (
-                          <button type="button"
-                            onClick={() => { setShowSaveForm(true); setSaveNickname(barcodeProduct.name) }}
-                            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/10 py-2 text-xs font-bold text-amber-700 dark:text-amber-400 transition-all hover:bg-amber-100 dark:hover:bg-amber-900/20">
-                            <span>⭐</span> Favorilere Kaydet
-                          </button>
-                        ) : (
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Takma Ad Girin</p>
-                            <div className="flex gap-2">
-                              <input type="text" value={saveNickname}
-                                onChange={e => setSaveNickname(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleSaveFavorite()}
-                                placeholder="örn. Kırmızı şekersiz çikolata"
-                                className="flex-1 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-night-card px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-amber-500" />
-                              <button type="button" onClick={handleSaveFavorite}
-                                className="cursor-pointer rounded-xl bg-amber-500 px-3 py-2 text-xs font-extrabold text-white hover:bg-amber-600 transition-colors">
-                                ⭐
-                              </button>
-                              <button type="button" onClick={() => setShowSaveForm(false)}
-                                className="cursor-pointer rounded-xl bg-slate-100 dark:bg-night-muted px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 transition-colors">
-                                İptal
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <div className="h-px flex-1 bg-slate-100 dark:bg-night-border" />
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">veya ara</span>
-                <div className="h-px flex-1 bg-slate-100 dark:bg-night-border" />
-              </div>
-
-              <div className="flex min-h-0 flex-1 flex-col">
+              <div className={searchResultsMode ? 'flex min-h-0 flex-1 flex-col' : ''}>
                 <SearchBar
                   query={query}       setQuery={setQuery}
                   selFood={selFood}   setSelFood={setSelFood}
@@ -1477,13 +1270,72 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                   portionAiHint={searchPortionAiHint}
                   onPortionEstimate={runSearchPortionEstimate}
                   results={searchResults}
-                  searchLoading={searchLoading}
                   preview={preview}
                   onAddToBasket={addToBasketFromSearch}
                   setError={setError}
                 />
               </div>
             </div>
+          )}
+
+          {/* ═══ BARCODE TAB ═══ */}
+          {tab === 'barcode' && (
+            <BarcodeTab
+              barcodeInput={barcodeInput}
+              setBarcodeInput={setBarcodeInput}
+              barcodeLoading={barcodeLoading}
+              barcodeError={barcodeError}
+              barcodeUnknown={barcodeUnknown}
+              barcodeProduct={barcodeProduct}
+              barcodeQty={barcodeQty}
+              setBarcodeQty={setBarcodeQty}
+              barcodeUnit={barcodeUnit}
+              setBarcodeUnit={setBarcodeUnit}
+              barcodeGramsPerUnit={barcodeGramsPerUnit}
+              setBarcodeGramsPerUnit={setBarcodeGramsPerUnit}
+              barcodePackageGrams={barcodePackageGrams}
+              barcodePortionLoading={barcodePortionLoading}
+              barcodePortionAiHint={barcodePortionAiHint}
+              unknownName={unknownName}
+              setUnknownName={setUnknownName}
+              unknownKcal100={unknownKcal100}
+              setUnknownKcal100={setUnknownKcal100}
+              unknownProt100={unknownProt100}
+              setUnknownProt100={setUnknownProt100}
+              unknownCarb100={unknownCarb100}
+              setUnknownCarb100={setUnknownCarb100}
+              unknownFat100={unknownFat100}
+              setUnknownFat100={setUnknownFat100}
+              unknownFib100={unknownFib100}
+              setUnknownFib100={setUnknownFib100}
+              unknownSug100={unknownSug100}
+              setUnknownSug100={setUnknownSug100}
+              unknownUnit={unknownUnit}
+              setUnknownUnit={setUnknownUnit}
+              unknownQty={unknownQty}
+              setUnknownQty={setUnknownQty}
+              unknownGramsPerUnit={unknownGramsPerUnit}
+              setUnknownGramsPerUnit={setUnknownGramsPerUnit}
+              unknownPortionLoading={unknownPortionLoading}
+              unknownPortionAiHint={unknownPortionAiHint}
+              showSaveForm={showSaveForm}
+              setShowSaveForm={setShowSaveForm}
+              saveNickname={saveNickname}
+              setSaveNickname={setSaveNickname}
+              onOpenScanner={openBarcodeScanner}
+              onFetchBarcode={handleFetchBarcode}
+              onAddBarcodeToBasket={addBarcodeToBasket}
+              onAddUnknownToBasket={addUnknownToBasket}
+              onSaveFavorite={handleSaveFavorite}
+              onRunBarcodePortionEstimate={runBarcodePortionEstimate}
+              onRunUnknownPortionEstimate={runUnknownPortionEstimate}
+              getUnitLabel={getUnitLabel}
+              isServingValid={isServingValid}
+              calcTotalGrams={calcTotalGrams}
+              macrosFrom100g={macrosFrom100g}
+              setError={setError}
+              setBarcodeError={setBarcodeError}
+            />
           )}
 
           {/* ═══ AI NLP TAB ═══ */}
@@ -1991,9 +1843,6 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
             </div>
           )}
 
-          {/* Basket preview */}
-          <BasketItem basket={basket} totals={basketTotals} onRemove={removeFromBasket} />
-
           {/* Health impact (warnings only — alternatives shown at top of search tab) */}
           {basket.length > 0 && (
             <div className={tab === 'search' ? 'flex-shrink-0' : ''}>
@@ -2003,7 +1852,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
         </div>
 
         {/* ── FIXED FOOTER ── */}
-        <div className="flex-shrink-0 px-5 pb-8 pt-3 space-y-2 border-t border-slate-100 dark:border-night-border bg-white dark:bg-night-card">
+        <div className="relative z-10 flex-shrink-0 px-5 pb-8 pt-3 space-y-2 border-t border-slate-100 dark:border-night-border bg-white dark:bg-night-card">
+
+          {basket.length > 0 && (
+            <BasketItem basket={basket} totals={basketTotals} onRemove={removeFromBasket} />
+          )}
 
           {error && (
             <p className={`rounded-xl px-3 py-2 text-xs font-semibold ${

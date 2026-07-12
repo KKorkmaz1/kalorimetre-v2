@@ -13,7 +13,6 @@ export default function SearchBar({
   portionAiHint = false,
   onPortionEstimate,
   results, preview,
-  searchLoading = false,
   onAddToBasket,
   setError,
 }) {
@@ -65,8 +64,16 @@ export default function SearchBar({
             </div>
             <button
               type="button"
-              onClick={() => { setSelFood(null); setSelUnit(''); setGramsPerUnit(''); setError('') }}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-emerald-200 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-300 dark:hover:bg-emerald-900/60">
+              onClick={e => {
+                e.stopPropagation()
+                setSelFood(null)
+                setSelUnit('')
+                setGramsPerUnit('')
+                setError('')
+              }}
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-emerald-200 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-300 dark:hover:bg-emerald-900/60"
+              aria-label="Seçimi kaldır"
+            >
               <CloseIcon />
             </button>
           </div>
@@ -168,12 +175,12 @@ export default function SearchBar({
           </div>
 
           <div className="max-h-[min(320px,45vh)] min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
-            {!searchLoading && results.length === 0 && query.trim() && (
+            {results.length === 0 && query.trim() && (
               <p className="py-4 text-center text-xs font-medium text-slate-400 dark:text-slate-500">
                 Sonuç bulunamadı
               </p>
             )}
-            {!searchLoading && results.map(food => {
+            {results.map(food => {
               const serving = getServingPreview(food)
               const displayUnits = getDisplayUnits(food, 2)
               const hasUsefulPortion = serving.unit !== 'Gram' && serving.unit !== 'Mililitre'

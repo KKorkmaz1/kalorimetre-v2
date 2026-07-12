@@ -178,42 +178,149 @@ export function getDisplayUnits(food, max = 2) {
     .slice(0, max)
 }
 
-function buildLocalFoodSearchHaystack(food) {
-  const aliasList = Array.isArray(food.aliases)
-    ? food.aliases
-    : typeof food.aliases === 'string'
-      ? food.aliases.split(',').map(s => s.trim())
-      : []
-
-  return [
-    food.name,
-    food.slug?.replace(/_/g, ' '),
-    food.category,
-    ...(food.tags ?? []),
-    ...aliasList,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
+/** Normalize Turkish text for search: lower-case, trim, fold accents. */
+function normalizeTurkishText(text) {
+  return String(text || '')
+    .trim()
+    .toLocaleLowerCase('tr')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/\s+/g, ' ')
 }
 
-function matchesLocalFoodSearch(food, words) {
-  const haystack = buildLocalFoodSearchHaystack(food)
-  return words.every(word => haystack.includes(word))
+function tokenizeSearchText(text) {
+  return normalizeTurkishText(text)
+    .split(/[\s&/+,]+/)
+    .map(t => t.replace(/[^a-z0-9]/gi, ''))
+    .filter(Boolean)
+}
+
+function getFoodAliases(food) {
+  if (Array.isArray(food.aliases)) return food.aliases
+  if (typeof food.aliases === 'string') {
+    return food.aliases.split(',').map(s => s.trim()).filter(Boolean)
+  }
+  return []
+}
+
+function getNameTokens(food) {
+  const parts = [
+    food.name,
+    food.slug?.replace(/_/g, ' '),
+  ].filter(Boolean)
+  return [...new Set(parts.flatMap(tokenizeSearchText))]
+}
+
+const SCORE = {
+  EXACT_NAME: 10000,
+  NAME_STARTS: 8000,
+  NAME_TOKEN_EXACT: 6000,
+  NAME_TOKEN_PREFIX: 5000,
+  NAME_TOKEN_CONTAINS: 4000,
+  ALIAS_EXACT: 3500,
+  ALIAS_CONTAINS: 3000,
+  TAG_CONTAINS: 2000,
+  CATEGORY_TOKEN: 100,
+}
+
+function scoreWordInTokens(word, tokens, { allowSubstring = true } = {}) {
+  if (!word) return 0
+
+  let best = 0
+  for (const token of tokens) {
+    if (token === word) {
+      best = Math.max(best, SCORE.NAME_TOKEN_EXACT)
+    } else if (word.length >= 3 && token.startsWith(word)) {
+      best = Math.max(best, SCORE.NAME_TOKEN_PREFIX)
+    } else if (allowSubstring && word.length >= 3 && token.includes(word)) {
+      best = Math.max(best, SCORE.NAME_TOKEN_CONTAINS)
+    }
+  }
+  return best
+}
+
+function scoreFoodSearch(food, rawQuery) {
+  const query = normalizeTurkishText(rawQuery)
+  if (!query) return 0
+
+  const words = query.split(/\s+/).filter(Boolean)
+  const name = normalizeTurkishText(food.name)
+  const nameTokens = getNameTokens(food)
+  const aliases = getFoodAliases(food).map(normalizeTurkishText)
+  const aliasTokens = aliases.flatMap(tokenizeSearchText)
+  const tagTexts = (food.tags ?? []).map(normalizeTurkishText)
+  const categoryTokens = tokenizeSearchText(food.category)
+
+  let total = 0
+
+  if (name === query) {
+    total += SCORE.EXACT_NAME
+  } else if (name.startsWith(query)) {
+    total += SCORE.NAME_STARTS
+  }
+
+  for (const word of words) {
+    const isShort = word.length <= 2
+    let wordScore = 0
+
+    wordScore = Math.max(wordScore, scoreWordInTokens(word, nameTokens, {
+      allowSubstring: !isShort,
+    }))
+
+    if (!isShort && name.startsWith(word)) {
+      wordScore = Math.max(wordScore, SCORE.NAME_STARTS)
+    }
+
+    for (const alias of aliases) {
+      if (alias === word) {
+        wordScore = Math.max(wordScore, SCORE.ALIAS_EXACT)
+      } else if (!isShort && alias.includes(word)) {
+        wordScore = Math.max(wordScore, SCORE.ALIAS_CONTAINS)
+      }
+    }
+
+    if (!isShort) {
+      wordScore = Math.max(wordScore, scoreWordInTokens(word, aliasTokens))
+    }
+
+    for (const tag of tagTexts) {
+      if (!isShort && tag.includes(word)) {
+        wordScore = Math.max(wordScore, SCORE.TAG_CONTAINS)
+      }
+    }
+
+    // Category-only fallback: allowed for short queries (e.g. "et"), never for
+    // longer terms like "tavuk" that would wrongly match "Et & Tavuk" category.
+    if (wordScore === 0 && isShort && categoryTokens.includes(word)) {
+      wordScore = SCORE.CATEGORY_TOKEN
+    }
+
+    if (wordScore === 0) return 0
+    total += wordScore
+  }
+
+  return total
 }
 
 /**
  * Primary user-facing food search — clean local catalog (MASTER_FOOD_DB / FOOD_DB).
- * Empty query returns the full catalog; non-empty queries filter by name, slug, tags, and aliases.
+ * Ranked by name > alias > tags > category (weak fallback only).
  * @param {string} query
- * @returns {Promise<Array>}
+ * @returns {Array}
  */
-export async function searchFoodsLocal(query) {
-  const q = String(query || '').trim().toLowerCase()
+export function searchFoodsLocal(query) {
+  const q = String(query || '').trim()
   if (!q) return FOOD_DB
 
-  const words = q.split(/\s+/).filter(Boolean)
-  return FOOD_DB.filter(f => matchesLocalFoodSearch(f, words))
+  return FOOD_DB
+    .map(food => ({ food, score: scoreFoodSearch(food, q) }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score || a.food.name.localeCompare(b.food.name, 'tr'))
+    .map(({ food }) => food)
 }
 
 /**
@@ -326,6 +433,6 @@ export async function searchNutritionFoods(query, limit = 20) {
 }
 
 /** @deprecated Use searchFoodsLocal for user-facing search */
-export async function searchFoodsHybrid(query) {
+export function searchFoodsHybrid(query) {
   return searchFoodsLocal(query)
 }

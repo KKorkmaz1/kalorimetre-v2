@@ -27,7 +27,7 @@
 
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../utils/supabaseClient'
-import { saveUserProfile, saveDayMeals } from '../utils/storage'
+import { saveUserProfile, saveDayMeals, getDayMeals } from '../utils/storage'
 import { macroCalculator, calculateMacros } from '../utils/macroCalculator'
 
 const DietContext = createContext(null)
@@ -42,6 +42,32 @@ export function todayStr() {
 }
 
 const EMPTY_DAY = { logs: [], water: 0 }
+
+/** Prefer Supabase row; fall back to localStorage when remote is empty or missing. */
+function resolveDayData(remoteRow, dateStr) {
+  const remote = remoteRow?.meals_data
+  const local = getDayMeals(dateStr)
+
+  const remoteLogs = Array.isArray(remote?.logs) ? remote.logs : []
+  const localLogs = Array.isArray(local?.logs) ? local.logs : []
+
+  if (remoteLogs.length > 0) {
+    return {
+      logs: remoteLogs,
+      water: Number(remote?.water) || 0,
+    }
+  }
+
+  if (localLogs.length > 0) {
+    console.log(`[DietContext] localStorage fallback for ${dateStr}:`, localLogs.length, 'logs')
+    return {
+      logs: localLogs,
+      water: Number(local?.water) || 0,
+    }
+  }
+
+  return EMPTY_DAY
+}
 
 function shiftDateStr(dateStr, deltaDays) {
   const d = new Date(`${dateStr}T12:00:00`)
@@ -300,13 +326,17 @@ export function DietProvider({ children, userId }) {
         }
 
         if (logsRes.error) {
-          console.error('[DietContext] logs fetch error:', logsRes.error)
-        } else {
-          const todayData = logsRes.data?.meals_data ?? EMPTY_DAY
-          const today = todayStr()
-          mealsCacheRef.current = { ...mealsCacheRef.current, [today]: todayData }
-          setMealsByDate(prev => ({ ...prev, [today]: todayData }))
-          setSelectedDate(today)
+          console.error('[DietContext] logs fetch error:', logsRes.error.message, logsRes.error.details, logsRes.error.hint, logsRes.error.code)
+        }
+
+        const today = todayStr()
+        const todayData = resolveDayData(logsRes.data, today)
+        mealsCacheRef.current = { ...mealsCacheRef.current, [today]: todayData }
+        setMealsByDate(prev => ({ ...prev, [today]: todayData }))
+        setSelectedDate(today)
+
+        if (userId && todayData.logs.length > 0 && !logsRes.data?.meals_data?.logs?.length) {
+          persistDay(today, todayData)
         }
       } catch (err) {
         if (!cancelled && profileMutationRef.current <= loadGeneration) {
@@ -343,13 +373,22 @@ export function DietProvider({ children, userId }) {
 
         if (cancelled) return
         if (error) {
-          console.error('[DietContext] day fetch error:', error)
+          console.error('[DietContext] day fetch error:', error.message, error.details, error.hint, error.code)
+          const localDay = getDayMeals(selectedDate)
+          if (localDay.logs?.length > 0) {
+            mealsCacheRef.current = { ...mealsCacheRef.current, [selectedDate]: localDay }
+            setMealsByDate(prev => ({ ...prev, [selectedDate]: localDay }))
+          }
           return
         }
 
-        const dayData = data?.meals_data ?? EMPTY_DAY
+        const dayData = resolveDayData(data, selectedDate)
         mealsCacheRef.current = { ...mealsCacheRef.current, [selectedDate]: dayData }
         setMealsByDate(prev => ({ ...prev, [selectedDate]: dayData }))
+
+        if (userId && dayData.logs.length > 0 && !data?.meals_data?.logs?.length) {
+          persistDay(selectedDate, dayData)
+        }
       } catch (err) {
         if (!cancelled) console.error('[DietContext] loadDay error:', err)
       } finally {
@@ -418,26 +457,56 @@ export function DietProvider({ children, userId }) {
   // ── Supabase persistence helpers ───────────────────────────────────────────
 
   async function persistDay(date, newDay) {
-    if (!date) return
-    saveDayMeals(date, newDay)
-    if (!userId) return
-    const totalKcal = newDay.logs.reduce((s, l) => s + (Number(l.kcal) || 0), 0)
-    try {
-      await supabase
-        .from('daily_logs')
-        .upsert(
-          {
-            user_id:    userId,
-            date,
-            total_kcal: totalKcal,
-            meals_data: newDay,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,date' },
-        )
-    } catch (err) {
-      console.error('[DietContext] persistDay error:', err)
+    if (!date) {
+      console.warn('[DietContext] persistDay skipped: missing date')
+      return
     }
+
+    const localResult = saveDayMeals(date, newDay)
+    if (!localResult.success) {
+      console.error('[DietContext] persistDay localStorage error:', localResult.error)
+    }
+
+    if (!userId) {
+      console.log('[DietContext] persistDay: no userId — saved to localStorage only for', date)
+      return
+    }
+
+    const totalKcal = newDay.logs.reduce((s, l) => s + (Number(l.kcal) || 0), 0)
+    const payload = {
+      user_id:    userId,
+      date,
+      total_kcal: totalKcal,
+      meals_data: newDay,
+      updated_at: new Date().toISOString(),
+    }
+
+    console.log('[DietContext] persistDay upsert:', {
+      date,
+      userId,
+      logCount: newDay.logs.length,
+      totalKcal,
+    })
+
+    const { data, error } = await supabase
+      .from('daily_logs')
+      .upsert(payload, { onConflict: 'user_id,date' })
+      .select('id, date, total_kcal')
+      .maybeSingle()
+
+    if (error) {
+      console.error(
+        '[DietContext] persistDay Supabase error:',
+        error.message,
+        error.details,
+        error.hint,
+        error.code,
+        payload,
+      )
+      return
+    }
+
+    console.log('[DietContext] persistDay success:', data)
   }
 
   function updateDayForSelected(updater) {
