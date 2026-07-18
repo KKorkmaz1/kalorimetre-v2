@@ -1,0 +1,51 @@
+food_id,name_tr,name_en,category_tr,current_calories_100g,current_protein_100g,current_carbs_100g,current_fat_100g,current_fiber_100g,current_sugar_100g,current_sodium_mg_100g,review_status,priority_reason
+2,Tavuk Göğsü (Izgara),Chicken breast grilled,Et & Tavuk,152.6667,30.6667,0,3.3333,0,0,0,pending_verification,En sık loglanan protein kaynaklarından
+3,Yulaf Ezmesi,Oats dry,Tahıl & Ekmek,382,16,66,6,0,0,0,needs_review,Kahvaltı temel gıdası; önceki USDA adayı bebek mamasıydı
+5,Tam Buğday Ekmek,Whole wheat bread,Tahıl & Ekmek,242.8571,14.2857,40,2.8571,0,0,0,pending_verification,Sağlıklı ekmek alternatifi; kaynak eşleşmesi gerekli
+6,Haşlanmış Yumurta,Egg boiled,Yumurta,142,12,1.2,10,0,0,0,pending_verification,Yüksek frekanslı protein kaynağı
+7,Pirinç Pilavı,Rice pilaf,Tahıl & Ekmek,126,2.6667,28,0.3333,0,0,0,needs_review,Pirinç türevi — tarif/TürKomp veya pişmiş pirinç USDA adayı gerekli
+8,Kuru Fasulye,White beans,Baklagil,141.5,9,23,1.5,0,0,0,needs_review,Temel baklagil; çiğ/haşlanmış durum farkı kritik
+10,Tam Yağlı Süt,Milk whole,Süt Ürünleri,61.5,3.2,4.8,3.3,0,0,0,needs_review,Temel süt; tam yağlı süt USDA eşleşmesi gerekli
+11,Somon (Izgara),Salmon grilled,Balık & Deniz,200,20,0,13.3333,0,0,0,pending_verification,Yaygın balık protein kaynağı
+12,Kinoa,Quinoa,Tahıl & Ekmek,118.6667,4.4,21,1.8667,0,0,0,needs_review,Yaygın tam tahıl alternatifi
+13,Avokado,Avocado,Meyve,179.3333,2,9,15,0,0,0,needs_review,Yaygın meyve; çiğ avokado USDA adayı mevcut
+14,Yoğurt (Tam Yağlı),Yogurt whole milk,Süt Ürünleri,62.6667,3.5333,4.7333,3.2667,0,0,0,needs_review,Temel süt ürünü; bebek maması adayları reddedilmeli
+15,Nohut (Haşlanmış),Chickpeas boiled,Baklagil,167.3333,8.9333,27,2.6,0,0,0,needs_review,Temel baklagil; çiğ/haşlanmış durum farkı kritik
+16,Badem,Almond,Kuruyemiş,666.6667,25,25,50,0,0,0,needs_review,Temel kuruyemiş; porsiyon/100g ölçekleme kontrolü gerekli
+17,Ispanak (Çiğ),Spinach raw,Sebze,30,3,3.5,0.5,0,0,0,needs_review,Temel yeşil sebze; çiğ ıspanak USDA adayı güçlü
+18,Tatlı Patates,Sweet potato,Sebze,87.5,1.5833,20,0.0833,0,0,0,needs_review,Temel nişasta kaynağı
+20,Zeytinyağı,Olive oil,Yağ & Sos,900,0,0,100,0,0,0,pending_verification,Temel yağ kaynağı; USDA adayı güçlü
+22,Beyaz Peynir,White cheese feta,Süt Ürünleri,266.6667,14.3333,4,21.3333,0,0,0,pending_verification,Temel peynir; USDA beyaz peynir adayı mevcut
+33,Bulgur Pilavı,Bulgur pilaf,Tahıl & Ekmek,154,5.6,30,1.3,0,0,0,needs_review,Bulgur türevi — tarif/TürKomp veya kuru/pişmiş bulgur USDA adayı gerekli
+34,Makarna (Haşlanmış),Pasta cooked,Tahıl & Ekmek,130.5,5,25.2,1.1,0,0,0,pending_verification,Temel tahıl; haşlanmış makarna USDA eşleşmesi gerekli
+37,Ayran,Ayran,İçecek,35.6,2,2.4,2,0,0,0,needs_review,Türk içeceği; yoğurt+süt bazlı kaynak veya tarif gerekli
+45,Elma,Apple,Meyve,57.7778,0.2778,13.7778,0.1667,0,0,0,needs_review,Yüksek frekanslı temel meyve; lif/şeker/sodyum doğrulanmalı
+46,Muz,Banana,Meyve,98.3333,1.0833,22.8333,0.3333,0,0,0,needs_review,Yüksek frekanslı temel meyve; lif/şeker/sodyum doğrulanmalı
+49,Portakal,Orange,Meyve,52.6667,0.9333,12,0.1333,0,0,0,needs_review,Yüksek frekanslı turunçgil
+51,Çilek,Strawberry,Meyve,36.6667,0.6667,7.7333,0.3333,0,0,0,pending_verification,Yaygın meyve; çiğ çilek USDA adayı güçlü
+53,Karpuz,Watermelon,Meyve,34.5,0.6,7.6,0.2,0,0,0,needs_review,Yaz meyvesi; sık loglanan temel gıda
+55,Armut,Pear,Meyve,62.9412,0.4118,15,0.1176,0,0,0,needs_review,Yaygın meyve
+65,Domates,Tomato,Sebze,20.8333,0.9167,3.9167,0.1667,0,0,0,needs_review,Temel sebze; çiğ hali USDA ile eşleşmeli
+66,Salatalık,Cucumber,Sebze,18,0.7,3.6,0.1,0,0,0,needs_review,Temel sebze; çiğ hali USDA ile eşleşmeli
+67,Marul,Lettuce,Sebze,17,0.9,3,0.1,0,0,0,pending_verification,Salata temel bileşeni
+68,Havuç,Carrot,Sebze,43.3333,0.8333,9.6667,0.1667,0,0,0,needs_review,Temel kök sebze
+69,Brokoli (Haşlanmış),Broccoli boiled,Sebze,42,2.4,7.2,0.4,0,0,0,pending_verification,Sık tüketilen sebze; haşlanmış brokoli USDA adayı güçlü
+71,Kabak,Zucchini,Sebze,20,1.2,3.1,0.3,0,0,0,needs_review,İsim düzeltildi; makrolar kaynakla doğrulanmalı
+73,Biber (Dolmalık),Bell pepper,Sebze,24,0.9,4.6,0.2,0,0,0,needs_review,Temel sebze
+75,Mantar (Beyaz),White mushroom raw,Sebze,28,3.1,3.3,0.3,0,0,0,needs_review,Temel sebze; çiğ mantar USDA adayı güçlü
+76,Patates (Haşlanmış),Potato boiled,Sebze,89.3333,1.8667,20.1333,0.1333,0,0,0,pending_verification,Temel nişasta kaynağı; pişmiş/çiğ durumu netleştirilmeli
+77,Mısır (Haşlanmış),Corn boiled,Sebze,111,3.4,21,1.5,0,0,0,pending_verification,Yaygın sebze/tahıl
+84,"Ton Balığı (Konserve, Suda)",Tuna canned in water,Balık & Deniz,113,26,0,1,0,0,0,pending_verification,Konserve balık; USDA adayı mevcut
+93,Kaşar Peyniri,Kashar cheese,Süt Ürünleri,380,25.2,2,30,0,0,0,pending_verification,Sık tüketilen peynir; USDA eşleşmesi gerekli
+99,Beyaz Ekmek,White bread,Tahıl & Ekmek,263.3333,9,49,3.3333,0,0,0,pending_verification,Günlük ekmek tüketimi; USDA adayı mevcut
+105,Ceviz,Walnut,Kuruyemiş,700,15,15,65,0,0,0,pending_verification,Temel kuruyemiş; USDA ceviz adayı mevcut
+106,Fındık,Hazelnut,Kuruyemiş,550,15,15,50,0,0,0,pending_verification,Temel kuruyemiş; fındık kreması adayları reddedilmeli
+124,Humus,Hummus,Baklagil,178,8,14,10,0,0,0,pending_verification,Akdeniz temel gıdası; USDA humus adayı mevcut
+130,Zeytin (Siyah),Black olive,Yağ & Sos,128.5714,0.8571,6.2857,11.1429,0,0,0,pending_verification,Akdeniz temel gıdası
+143,Limon,Lemon,Meyve,28.3333,1,9,0.3333,0,0,0,needs_review,Sık kullanılan temel meyve/sebze
+152,Soğan (Çiğ),Onion raw,Sebze,40,1.1,9.3,0.1,0,0,0,needs_review,Temel mutfak bileşeni; çiğ soğan USDA adayı güçlü
+153,Sarımsak,Garlic raw,Sebze,433.3333,20,100,0,0,0,0,needs_review,Makro değerleri şüpheli; porsiyon/100g kontrolü gerekli
+173,Yumurta (Çiğ),Egg raw whole,Yumurta,144,12.6,0.8,9.6,0,0,0,pending_verification,Çiğ yumurta referansı; USDA adayı güçlü
+188,Kırmızı Mercimek (Haşlanmış),Red lentils boiled,Baklagil,116,9,20,0.4,0,0,0,needs_review,Temel mercimek; haşlanmış kırmızı mercimek USDA eşleşmesi gerekli
+189,Yeşil Mercimek (Haşlanmış),Green lentils boiled,Baklagil,116,9,20,0.4,0,0,0,needs_review,Temel mercimek; haşlanmış yeşil mercimek USDA eşleşmesi gerekli
+238,Balık (Izgara),Fish grilled,Balık & Deniz,137.3333,22.6667,0,4.6667,0,0,0,needs_review,Genel balık referansı; tür bazlı doğrulama gerekebilir

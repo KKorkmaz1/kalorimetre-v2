@@ -1,0 +1,19 @@
+food_id,name_tr,updated_calories,updated_protein,updated_carbs,updated_fat,updated_fiber,updated_sugar,updated_sodium,fiber_sugar_sodium_note,review_status,source_food_id,action_taken
+2,Tavuk Göğsü (Izgara),226,45.8,0,4.8,,,,"USDA lif/şeker/sodyum 0; hayvan ürünü — sodyum eksik veri olabilir, bekletildi.",macro_verified_usda,1276,macro_update_usda
+3,Yulaf Ezmesi,192,6.6,33.9,3.3,10.1,0.99,6,Lif/şeker/sodyum USDA ile güncellendi.,macro_verified_usda,5792,macro_update_usda+micronutrient_partial
+10,Tam Yağlı Süt,129,6.6,9.3,7.3,,,49,"Sodyum USDA ile güncellendi; şeker (laktoz) USDA 0 eksik veri, bekletildi.",macro_verified_usda,5123,macro_update_usda+micronutrient_partial
+13,Avokado,261,3,12.8,22,,,,"Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.",macro_verified_usda,6009,macro_update_usda
+20,Zeytinyağı,135,0,0,15,,,,Yağ ürünü; lif/şeker/sodyum alanı eklenmedi (0 değerleri anlamlı).,macro_verified_usda,5877,macro_update_usda
+45,Elma,104,0.5,24.9,0.3,2.4,10.39,1,Lif/şeker/sodyum USDA ile güncellendi.,macro_verified_usda,6172,macro_update_usda+micronutrient_partial
+46,Muz,118,1.3,27.4,0.4,2.6,12.23,1,Lif/şeker/sodyum USDA ile güncellendi.,macro_verified_usda,6262,macro_update_usda+micronutrient_partial
+49,Portakal,78,1.4,17.7,0.2,2,,9,"Lif ve sodyum güncellendi; şeker USDA 0 eksik veri (meyve), bekletildi.",macro_verified_usda,6308,macro_update_usda+micronutrient_partial
+51,Çilek,52,1,11.4,0.3,,,,"Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.",macro_verified_usda,6495,macro_update_usda
+53,Karpuz,68,1.2,15.1,0.3,,,,"Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.",macro_verified_usda,2640,macro_update_usda
+55,Armut,108,0.6,25.9,0.2,3.1,9.75,1,Lif/şeker/sodyum USDA ile güncellendi.,macro_verified_usda,6001,macro_update_usda+micronutrient_partial
+67,Marul,17,0.7,3.4,0.1,,,,"Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.",macro_verified_usda,6163,macro_update_usda
+68,Havuç,25,0.5,5.4,0.1,2.694,,62.66,"Lif ve sodyum güncellendi; şeker USDA 0 eksik veri, bekletildi.",macro_verified_usda,6153,macro_update_usda+micronutrient_partial
+69,Brokoli (Haşlanmış),63,3.6,10.8,0.6,,,,"Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.",macro_verified_usda,2339,macro_update_usda
+75,Mantar (Beyaz),28,3.1,3.3,0.3,,,,"USDA lif 0 eksik veri olabilir, bekletildi.",macro_verified_usda,588,macro_update_usda
+99,Beyaz Ekmek,80,2.8,14.8,1.1,,,,"Ekmek; USDA lif/şeker/sodyum 0 eksik veri olabilir, bekletildi.",macro_verified_usda,532,macro_update_usda
+130,Zeytin (Siyah),44,0.3,2.1,3.8,,,,"Salamura zeytin; USDA sodyum 0 şüpheli, tüm mikro bekletildi.",macro_verified_usda,4854,macro_update_usda
+173,Yumurta (Çiğ),70,6.3,0.4,4.8,,,,"USDA sodyum 0 eksik veri olabilir, bekletildi.",macro_verified_usda,6041,macro_update_usda
