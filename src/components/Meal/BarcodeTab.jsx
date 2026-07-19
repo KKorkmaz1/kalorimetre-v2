@@ -1,4 +1,5 @@
 import { PlusIcon } from './MealIcons'
+import { formatKcal, formatMacro, formatWeight } from '../../utils/nutritionFormat'
 
 const SERVING_UNITS = [
   { id: 'gram',     label: 'Gram'     },
@@ -238,7 +239,7 @@ export default function BarcodeTab({
                 <p className="mt-0.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">100g başına değerler</p>
               </div>
               <span className="flex-shrink-0 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
-                {barcodeProduct.kcal100} kcal
+                {formatKcal(barcodeProduct.kcal100)} kcal
               </span>
             </div>
 
@@ -252,7 +253,7 @@ export default function BarcodeTab({
               ].map(({ label, val, color }) => (
                 <div key={label} className="rounded-lg bg-slate-50 dark:bg-night-muted px-1 py-1.5">
                   <p className={`text-[9px] font-bold ${color}`}>{label}</p>
-                  <p className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100">{val}g</p>
+                  <p className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100">{formatMacro(val)}g</p>
                 </div>
               ))}
             </div>
@@ -263,7 +264,7 @@ export default function BarcodeTab({
                 <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5">
                   <span className="text-sm">📦</span>
                   <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                    Paket ağırlığı: <span className="font-extrabold">{barcodePackageGrams}g</span>
+                    Paket ağırlığı: <span className="font-extrabold">{formatWeight(barcodePackageGrams)}g</span>
                   </p>
                 </div>
               )}
@@ -348,7 +349,7 @@ export default function BarcodeTab({
                   <PlusIcon />
                   Sepete Ekle
                   {isServingValid(barcodeUnit, barcodeQty, barcodeGramsPerUnit)
-                    ? ` · ${macrosFrom100g(barcodeProduct, calcTotalGrams(barcodeUnit, barcodeQty, barcodeGramsPerUnit)).kcal} kcal`
+                    ? ` · ${formatKcal(macrosFrom100g(barcodeProduct, calcTotalGrams(barcodeUnit, barcodeQty, barcodeGramsPerUnit)).kcal)} kcal`
                     : ''}
                 </button>
               </div>

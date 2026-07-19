@@ -1,0 +1,22 @@
+food_id,name,current_default_label,current_default_grams,official_portion_label,official_portion_grams,difference_percent,recommended_action,review_note
+241,Espresso,100 Gram,100,100 Gram,100,0,add_user_friendly_portion,Only 100 Gram is currently selected as default; consider a user-friendly espresso serving after manual review.
+10,Tam Yağlı Süt,1 Su Bardağı,200,1 Bardak,229,12.7,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+171,Yarım Yağlı Süt,1 Bardak,240,1 Bardak,227,5.7,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+145,Böğürtlen,1 Kase,100,1 Bardak,144,30.6,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+148,Mango,1 Adet,165,1 Adet Mango (yenilebilir kısım),336,50.9,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+50,Mandalina,1 Adet,75,"1 Adet Mandalina (orta; yaklaşık 6,4 Cm Çap)",88,14.8,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+142,Ayva,1 Adet,200,1 Adet Ayva (yenilebilir kısım),92,117.4,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+147,Dut,1 Kase,100,1 Bardak,140,28.6,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+150,Kuru Kayısı,1 Adet,15,1 Yarım Kuru Kayısı,3.5,328.6,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+74,Roka,1 Kase,80,1 Bardak,20,300,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+17,Ispanak (Çiğ),1 Kase,40,1 Bardak,30,33.3,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+70,Karnabahar (Haşlanmış),1 Porsiyon,150,"1 Bardak (yaklaşık 2,5 Cm Parçalar)",124,21,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+66,Salatalık (Çiğ),1 Adet,200,100 Gram,100,100,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+174,Yumurta (Sahanda),1 Porsiyon,100,1 Adet (büyük),46,117.4,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+169,Krem Peynir,1 Porsiyon,30,1 Yemek Kaşığı,14.5,106.9,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+14,Yoğurt (Tam Yağlı),1 Kase,150,100 Gram,100,50,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+12,Kinoa (Haşlanmış),1 Kase,150,1 Bardak,185,18.9,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+16,Badem (Çiğ),1 Adet,1.2,100 Gram,100,98.8,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+216,Kaju (Çiğ),1 Kase,30,100 Gram,100,70,manual_portion_review,"Existing default ""1 Kase / 30 g"" is semantically questionable for raw cashews; USDA approved 100 Gram only."
+109,Chia Tohumu,1 Porsiyon,12,100 Gram,100,88,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.
+20,Zeytinyağı,1 Yemek Kaşığı,15,1 Yemek Kaşığı,13.5,11.1,keep_local_default_review_additional,Local default preserved; official USDA portion differs materially and is available as an additional option.

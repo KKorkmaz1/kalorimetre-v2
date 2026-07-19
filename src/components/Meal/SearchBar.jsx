@@ -2,6 +2,7 @@ import { CloseIcon, PlusIcon } from './MealIcons'
 import { unitNeedsGramInput } from './foodData'
 import { getServingPreview } from '../../utils/foodDatabase.js'
 import { getDisplayUnits } from '../../services/foodService'
+import { formatKcal, formatMacro, formatWeight } from '../../utils/nutritionFormat'
 
 export default function SearchBar({
   query, setQuery,
@@ -55,9 +56,9 @@ export default function SearchBar({
               <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{selFood.name}</p>
               {selServing && (
                 <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
-                  1 {selServing.unit}: {selServing.kcal} kcal · P:{selServing.protein}g K:{selServing.carbs}g Y:{selServing.fat}g
+                  1 {selServing.unit}: {formatKcal(selServing.kcal)} kcal · P:{formatMacro(selServing.protein)}g K:{formatMacro(selServing.carbs)}g Y:{formatMacro(selServing.fat)}g
                   {selServing.grams > 0 && (
-                    <span className="text-emerald-400 dark:text-emerald-600"> · ≈{selServing.grams}g</span>
+                    <span className="text-emerald-400 dark:text-emerald-600"> · ≈{formatWeight(selServing.grams)}g</span>
                   )}
                 </p>
               )}
@@ -135,7 +136,7 @@ export default function SearchBar({
             />
             <span className="text-sm text-slate-500 dark:text-slate-400">{selUnit}</span>
             {preview && preview.grams > 0 && (
-              <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-500">≈ {preview.grams}g</span>
+              <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-500">≈ {formatWeight(preview.grams)}g</span>
             )}
           </div>
 
@@ -143,13 +144,13 @@ export default function SearchBar({
           {preview && preview.kcal > 0 && (
             <div className="mt-2 flex items-center justify-between rounded-xl bg-white dark:bg-night-card px-3 py-2 shadow-sm">
               <span className="text-xl font-extrabold text-slate-900 dark:text-slate-100">
-                {preview.kcal}
+                {formatKcal(preview.kcal)}
                 <span className="ml-1 text-sm font-medium text-slate-400 dark:text-slate-500">kcal</span>
               </span>
               <div className="flex gap-3 text-[10px]">
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">{preview.protein}g P</span>
-                <span className="font-bold text-amber-600 dark:text-amber-400">{preview.carbs}g K</span>
-                <span className="font-bold text-rose-500 dark:text-rose-400">{preview.fat}g Y</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">{formatMacro(preview.protein)}g P</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400">{formatMacro(preview.carbs)}g K</span>
+                <span className="font-bold text-rose-500 dark:text-rose-400">{formatMacro(preview.fat)}g Y</span>
               </div>
             </div>
           )}
@@ -195,13 +196,13 @@ export default function SearchBar({
                       {hasUsefulPortion && (
                         <span className="text-slate-500 dark:text-slate-400">
                           {serving.unit}
-                          {serving.grams > 0 && ` · ≈${serving.grams}g`}
+                          {serving.grams > 0 && ` · ≈${formatWeight(serving.grams)}g`}
                           {' · '}
                         </span>
                       )}
-                      <span className="font-semibold text-slate-600 dark:text-slate-300">{serving.kcal} kcal</span>
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">{formatKcal(serving.kcal)} kcal</span>
                       {' · '}
-                      P:{serving.protein}g K:{serving.carbs}g Y:{serving.fat}g
+                      P:{formatMacro(serving.protein)}g K:{formatMacro(serving.carbs)}g Y:{formatMacro(serving.fat)}g
                     </p>
                     {displayUnits.length > 0 && (
                       <div className="mt-1 flex gap-1 overflow-hidden">

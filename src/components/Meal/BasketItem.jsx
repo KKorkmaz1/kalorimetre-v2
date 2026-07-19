@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CloseIcon } from './MealIcons'
+import { formatKcal, formatMacro } from '../../utils/nutritionFormat'
 
 export default function BasketItem({ basket, totals, onRemove }) {
   const [expanded, setExpanded] = useState(false)
@@ -13,7 +14,7 @@ export default function BasketItem({ basket, totals, onRemove }) {
           Sepet · {basket.length} ürün
           {!expanded && (
             <span className="ml-1.5 normal-case tracking-normal text-emerald-600 dark:text-emerald-500">
-              · {totals.kcal} kcal
+              · {formatKcal(totals.kcal)} kcal
             </span>
           )}
         </p>
@@ -35,7 +36,7 @@ export default function BasketItem({ basket, totals, onRemove }) {
                   <span className="block truncate text-xs font-semibold text-slate-800 dark:text-slate-200">{item.foodName}</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400">{item.qty} {item.unit}</span>
                 </div>
-                <span className="flex-shrink-0 text-xs font-extrabold text-slate-700 dark:text-slate-300">{item.kcal} kcal</span>
+                <span className="flex-shrink-0 text-xs font-extrabold text-slate-700 dark:text-slate-300">{formatKcal(item.kcal)} kcal</span>
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); onRemove(item.id) }}
@@ -51,9 +52,9 @@ export default function BasketItem({ basket, totals, onRemove }) {
             <div className="mt-2.5 flex justify-between border-t border-emerald-200 dark:border-emerald-900/40 pt-2">
               <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Toplam</span>
               <div className="text-right">
-                <span className="text-sm font-extrabold text-emerald-700 dark:text-emerald-400">{totals.kcal} kcal</span>
+                <span className="text-sm font-extrabold text-emerald-700 dark:text-emerald-400">{formatKcal(totals.kcal)} kcal</span>
                 <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-500">
-                  P:{totals.protein}g K:{totals.carbs}g Y:{totals.fat}g
+                  P:{formatMacro(totals.protein)}g K:{formatMacro(totals.carbs)}g Y:{formatMacro(totals.fat)}g
                 </span>
               </div>
             </div>

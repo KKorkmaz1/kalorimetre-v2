@@ -3,6 +3,7 @@ import { useDiet } from '../context/DietContext'
 import { getDailyCalorieTarget } from '../utils/macroEngine'
 import { ProteinIcon, CarbsIcon, FatIcon } from './Meal/MealIcons'
 import { supabase } from '../utils/supabaseClient'
+import { formatKcal, formatMacro } from '../utils/nutritionFormat'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -206,7 +207,7 @@ function DayDetailModal({ year, month, day, storedData, dayEntry, onClose }) {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Kalori</p>
                 <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">
-                  {consumed.kcal.toLocaleString('tr-TR')}
+                  {formatKcal(consumed.kcal)}
                   <span className="ml-1 text-sm font-medium text-slate-400 dark:text-slate-500">kcal</span>
                 </p>
               </div>
@@ -253,7 +254,7 @@ function DayDetailModal({ year, month, day, storedData, dayEntry, onClose }) {
                 <div className="mb-1 flex items-center justify-between">
                   <span className={`flex items-center gap-1.5 text-xs font-semibold ${textColor}`}>{icon} {label}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">{Math.round(val)}g</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{formatMacro(val)}g</span>
                     {' / '}{target}g
                   </span>
                 </div>
@@ -302,7 +303,7 @@ function DayDetailModal({ year, month, day, storedData, dayEntry, onClose }) {
                           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{log.name}</p>
                           {(log.protein > 0 || log.carbs > 0 || log.fat > 0) && (
                             <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                              P:{Math.round(log.protein)}g · K:{Math.round(log.carbs)}g · Y:{Math.round(log.fat)}g
+                              P:{formatMacro(log.protein)}g · K:{formatMacro(log.carbs)}g · Y:{formatMacro(log.fat)}g
                             </p>
                           )}
                           {log.servingInfo && (
@@ -310,7 +311,7 @@ function DayDetailModal({ year, month, day, storedData, dayEntry, onClose }) {
                           )}
                         </div>
                         <span className="ml-2 flex-shrink-0 text-sm font-extrabold text-slate-800 dark:text-slate-100">
-                          {Math.round(log.kcal)} kcal
+                          {formatKcal(log.kcal)} kcal
                         </span>
                       </div>
                     </div>
@@ -488,7 +489,7 @@ function DayCell({ day, data, isToday, onClick, target = 2000 }) {
 
       <div className="mt-1 w-full min-w-0 text-center">
         <p className="truncate text-[10px] font-semibold tabular-nums text-gray-700 dark:text-slate-200 sm:text-xs">
-          {data.kcal.toLocaleString('tr-TR')} / {target.toLocaleString('tr-TR')} kcal
+          {formatKcal(data.kcal)} / {formatKcal(target)} kcal
         </p>
         <p className={`mt-0.5 truncate text-[8px] tabular-nums sm:text-[9px] ${
           remaining >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
@@ -499,9 +500,9 @@ function DayCell({ day, data, isToday, onClick, target = 2000 }) {
         </p>
         {hasMacros && (
           <p className="mt-0.5 flex justify-center gap-1 truncate text-[8px] text-gray-500 tabular-nums dark:text-slate-400 sm:text-[9px]">
-            <span>P:{Math.round(data.protein)}g</span>
-            <span>C:{Math.round(data.carbs)}g</span>
-            <span>Y:{Math.round(data.fat)}g</span>
+            <span>P:{formatMacro(data.protein)}g</span>
+            <span>C:{formatMacro(data.carbs)}g</span>
+            <span>Y:{formatMacro(data.fat)}g</span>
           </p>
         )}
       </div>

@@ -1,0 +1,442 @@
+food_id,name,field,official_usda_per_100g,food_db_per_100g,absolute_difference,relative_difference,validation_status
+6,Yumurta (Haşlanmış),calories,155,155,0,0,PASS
+6,Yumurta (Haşlanmış),protein,12.58,12.58,0,0,PASS
+6,Yumurta (Haşlanmış),carbs,1.12,1.12,0,0,PASS
+6,Yumurta (Haşlanmış),fat,10.61,10.61,0,0,PASS
+6,Yumurta (Haşlanmış),fiber_100g,0,0,0,,PASS
+6,Yumurta (Haşlanmış),sugar_100g,1.12,1.12,0,0,PASS
+6,Yumurta (Haşlanmış),sodium_mg_100g,124,124,0,0,PASS
+10,Tam Yağlı Süt,calories,60,60,0,0,PASS
+10,Tam Yağlı Süt,protein,3.28,3.28,0,0,PASS
+10,Tam Yağlı Süt,carbs,4.67,4.67,0,0,PASS
+10,Tam Yağlı Süt,fat,3.2,3.2,0,0,PASS
+10,Tam Yağlı Süt,fiber_100g,,,,,PASS
+10,Tam Yağlı Süt,sugar_100g,4.81,4.81,0,0,PASS
+10,Tam Yağlı Süt,sodium_mg_100g,38,38,0,0,PASS
+12,Kinoa (Haşlanmış),calories,120,120,0,0,PASS
+12,Kinoa (Haşlanmış),protein,4.4,4.4,0,0,PASS
+12,Kinoa (Haşlanmış),carbs,21.3,21.3,0,0,PASS
+12,Kinoa (Haşlanmış),fat,1.92,1.92,0,0,PASS
+12,Kinoa (Haşlanmış),fiber_100g,2.8,2.8,0,0,PASS
+12,Kinoa (Haşlanmış),sugar_100g,0.87,0.87,0,0,PASS
+12,Kinoa (Haşlanmış),sodium_mg_100g,7,7,0,0,PASS
+13,Avokado,calories,160,160,0,0,PASS
+13,Avokado,protein,2,2,0,0,PASS
+13,Avokado,carbs,8.53,8.53,0,0,PASS
+13,Avokado,fat,14.66,14.66,0,0,PASS
+13,Avokado,fiber_100g,6.7,6.7,0,0,PASS
+13,Avokado,sugar_100g,0.66,0.66,0,0,PASS
+13,Avokado,sodium_mg_100g,7,7,0,0,PASS
+14,Yoğurt (Tam Yağlı),calories,77.9524,77.9524,0,0,PASS
+14,Yoğurt (Tam Yağlı),protein,3.824172,3.824172,0,0,PASS
+14,Yoğurt (Tam Yağlı),carbs,5.574928,5.574928,0,0,PASS
+14,Yoğurt (Tam Yağlı),fat,4.484,4.484,0,0,PASS
+14,Yoğurt (Tam Yağlı),fiber_100g,,,,,PASS
+14,Yoğurt (Tam Yağlı),sugar_100g,4.0936,4.0936,0,0,PASS
+14,Yoğurt (Tam Yağlı),sodium_mg_100g,41.78,41.78,0,0,PASS
+16,Badem (Çiğ),calories,625.75,625.75,0,0,PASS
+16,Badem (Çiğ),protein,21.45038,21.45038,0,0,PASS
+16,Badem (Çiğ),carbs,20.03462,20.03462,0,0,PASS
+16,Badem (Çiğ),fat,51.09,51.09,0,0,PASS
+16,Badem (Çiğ),fiber_100g,10.78,10.78,0,0,PASS
+16,Badem (Çiğ),sugar_100g,,,,,PASS
+16,Badem (Çiğ),sodium_mg_100g,0,0,0,,PASS
+17,Ispanak (Çiğ),calories,23,23,0,0,PASS
+17,Ispanak (Çiğ),protein,2.86,2.86,0,0,PASS
+17,Ispanak (Çiğ),carbs,3.63,3.63,0,0,PASS
+17,Ispanak (Çiğ),fat,0.39,0.39,0,0,PASS
+17,Ispanak (Çiğ),fiber_100g,2.2,2.2,0,0,PASS
+17,Ispanak (Çiğ),sugar_100g,0.42,0.42,0,0,PASS
+17,Ispanak (Çiğ),sodium_mg_100g,79,79,0,0,PASS
+20,Zeytinyağı,calories,884,884,0,0,PASS
+20,Zeytinyağı,protein,0,0,0,,PASS
+20,Zeytinyağı,carbs,0,0,0,,PASS
+20,Zeytinyağı,fat,100,100,0,0,PASS
+20,Zeytinyağı,fiber_100g,0,0,0,,PASS
+20,Zeytinyağı,sugar_100g,0,0,0,,PASS
+20,Zeytinyağı,sodium_mg_100g,2,2,0,0,PASS
+50,Mandalina,calories,53,53,0,0,PASS
+50,Mandalina,protein,0.81,0.81,0,0,PASS
+50,Mandalina,carbs,13.34,13.34,0,0,PASS
+50,Mandalina,fat,0.31,0.31,0,0,PASS
+50,Mandalina,fiber_100g,1.8,1.8,0,0,PASS
+50,Mandalina,sugar_100g,10.58,10.58,0,0,PASS
+50,Mandalina,sodium_mg_100g,2,2,0,0,PASS
+61,Ananas,calories,60.1113,60.1113,0,0,PASS
+61,Ananas,protein,0.4609375,0.4609375,0,0,PASS
+61,Ananas,carbs,14.0914625,14.0914625,0,0,PASS
+61,Ananas,fat,0.2113,0.2113,0,0,PASS
+61,Ananas,fiber_100g,0.9346,0.9346,0,0,PASS
+61,Ananas,sugar_100g,11.42,11.42,0,0,PASS
+61,Ananas,sodium_mg_100g,0,0,0,,PASS
+65,Domates (Çiğ),calories,18,18,0,0,PASS
+65,Domates (Çiğ),protein,0.88,0.88,0,0,PASS
+65,Domates (Çiğ),carbs,3.89,3.89,0,0,PASS
+65,Domates (Çiğ),fat,0.2,0.2,0,0,PASS
+65,Domates (Çiğ),fiber_100g,1.2,1.2,0,0,PASS
+65,Domates (Çiğ),sugar_100g,2.63,2.63,0,0,PASS
+65,Domates (Çiğ),sodium_mg_100g,5,5,0,0,PASS
+66,Salatalık (Çiğ),calories,15.9075,15.9075,0,0,PASS
+66,Salatalık (Çiğ),protein,0.625,0.625,0,0,PASS
+66,Salatalık (Çiğ),carbs,2.9525,2.9525,0,0,PASS
+66,Salatalık (Çiğ),fat,0.1775,0.1775,0,0,PASS
+66,Salatalık (Çiğ),fiber_100g,,,,,PASS
+66,Salatalık (Çiğ),sugar_100g,,,,,PASS
+66,Salatalık (Çiğ),sodium_mg_100g,1.515,1.515,0,0,PASS
+68,Havuç (Çiğ),calories,41,41,0,0,PASS
+68,Havuç (Çiğ),protein,0.93,0.93,0,0,PASS
+68,Havuç (Çiğ),carbs,9.58,9.58,0,0,PASS
+68,Havuç (Çiğ),fat,0.24,0.24,0,0,PASS
+68,Havuç (Çiğ),fiber_100g,2.8,2.8,0,0,PASS
+68,Havuç (Çiğ),sugar_100g,4.74,4.74,0,0,PASS
+68,Havuç (Çiğ),sodium_mg_100g,69,69,0,0,PASS
+69,Brokoli (Haşlanmış),calories,35,35,0,0,PASS
+69,Brokoli (Haşlanmış),protein,2.38,2.38,0,0,PASS
+69,Brokoli (Haşlanmış),carbs,7.18,7.18,0,0,PASS
+69,Brokoli (Haşlanmış),fat,0.41,0.41,0,0,PASS
+69,Brokoli (Haşlanmış),fiber_100g,3.3,3.3,0,0,PASS
+69,Brokoli (Haşlanmış),sugar_100g,1.39,1.39,0,0,PASS
+69,Brokoli (Haşlanmış),sodium_mg_100g,41,41,0,0,PASS
+70,Karnabahar (Haşlanmış),calories,23,23,0,0,PASS
+70,Karnabahar (Haşlanmış),protein,1.84,1.84,0,0,PASS
+70,Karnabahar (Haşlanmış),carbs,4.11,4.11,0,0,PASS
+70,Karnabahar (Haşlanmış),fat,0.45,0.45,0,0,PASS
+70,Karnabahar (Haşlanmış),fiber_100g,2.3,2.3,0,0,PASS
+70,Karnabahar (Haşlanmış),sugar_100g,2.08,2.08,0,0,PASS
+70,Karnabahar (Haşlanmış),sodium_mg_100g,15,15,0,0,PASS
+74,Roka,calories,25,25,0,0,PASS
+74,Roka,protein,2.58,2.58,0,0,PASS
+74,Roka,carbs,3.65,3.65,0,0,PASS
+74,Roka,fat,0.66,0.66,0,0,PASS
+74,Roka,fiber_100g,1.6,1.6,0,0,PASS
+74,Roka,sugar_100g,2.05,2.05,0,0,PASS
+74,Roka,sodium_mg_100g,27,27,0,0,PASS
+109,Chia Tohumu,calories,517.154,517.154,0,0,PASS
+109,Chia Tohumu,protein,17.013,17.013,0,0,PASS
+109,Chia Tohumu,carbs,38.273,38.273,0,0,PASS
+109,Chia Tohumu,fat,32.89,32.89,0,0,PASS
+109,Chia Tohumu,fiber_100g,,,,,PASS
+109,Chia Tohumu,sugar_100g,,,,,PASS
+109,Chia Tohumu,sodium_mg_100g,0,0,0,,PASS
+142,Ayva,calories,57,57,0,0,PASS
+142,Ayva,protein,0.4,0.4,0,0,PASS
+142,Ayva,carbs,15.3,15.3,0,0,PASS
+142,Ayva,fat,0.1,0.1,0,0,PASS
+142,Ayva,fiber_100g,1.9,1.9,0,0,PASS
+142,Ayva,sugar_100g,,,,,PASS
+142,Ayva,sodium_mg_100g,4,4,0,0,PASS
+145,Böğürtlen,calories,43,43,0,0,PASS
+145,Böğürtlen,protein,1.39,1.39,0,0,PASS
+145,Böğürtlen,carbs,9.61,9.61,0,0,PASS
+145,Böğürtlen,fat,0.49,0.49,0,0,PASS
+145,Böğürtlen,fiber_100g,5.3,5.3,0,0,PASS
+145,Böğürtlen,sugar_100g,4.88,4.88,0,0,PASS
+145,Böğürtlen,sodium_mg_100g,1,1,0,0,PASS
+146,Ahududu,calories,57.3375,57.3375,0,0,PASS
+146,Ahududu,protein,1.008125,1.008125,0,0,PASS
+146,Ahududu,carbs,12.904375,12.904375,0,0,PASS
+146,Ahududu,fat,0.1875,0.1875,0,0,PASS
+146,Ahududu,fiber_100g,,,,,PASS
+146,Ahududu,sugar_100g,2.6759,2.6759,0,0,PASS
+146,Ahududu,sodium_mg_100g,0,0,0,,PASS
+147,Dut,calories,43,43,0,0,PASS
+147,Dut,protein,1.44,1.44,0,0,PASS
+147,Dut,carbs,9.8,9.8,0,0,PASS
+147,Dut,fat,0.39,0.39,0,0,PASS
+147,Dut,fiber_100g,1.7,1.7,0,0,PASS
+147,Dut,sugar_100g,8.1,8.1,0,0,PASS
+147,Dut,sodium_mg_100g,10,10,0,0,PASS
+148,Mango,calories,60,60,0,0,PASS
+148,Mango,protein,0.82,0.82,0,0,PASS
+148,Mango,carbs,14.98,14.98,0,0,PASS
+148,Mango,fat,0.38,0.38,0,0,PASS
+148,Mango,fiber_100g,1.6,1.6,0,0,PASS
+148,Mango,sugar_100g,13.66,13.66,0,0,PASS
+148,Mango,sodium_mg_100g,1,1,0,0,PASS
+150,Kuru Kayısı,calories,241,241,0,0,PASS
+150,Kuru Kayısı,protein,3.39,3.39,0,0,PASS
+150,Kuru Kayısı,carbs,62.64,62.64,0,0,PASS
+150,Kuru Kayısı,fat,0.51,0.51,0,0,PASS
+150,Kuru Kayısı,fiber_100g,7.3,7.3,0,0,PASS
+150,Kuru Kayısı,sugar_100g,53.44,53.44,0,0,PASS
+150,Kuru Kayısı,sodium_mg_100g,10,10,0,0,PASS
+169,Krem Peynir,calories,350,350,0,0,PASS
+169,Krem Peynir,protein,6.15,6.15,0,0,PASS
+169,Krem Peynir,carbs,5.52,5.52,0,0,PASS
+169,Krem Peynir,fat,34.44,34.44,0,0,PASS
+169,Krem Peynir,fiber_100g,0,0,0,,PASS
+169,Krem Peynir,sugar_100g,3.76,3.76,0,0,PASS
+169,Krem Peynir,sodium_mg_100g,314,314,0,0,PASS
+171,Yarım Yağlı Süt,calories,50,50,0,0,PASS
+171,Yarım Yağlı Süt,protein,3.35,3.35,0,0,PASS
+171,Yarım Yağlı Süt,carbs,4.91,4.91,0,0,PASS
+171,Yarım Yağlı Süt,fat,1.9,1.9,0,0,PASS
+171,Yarım Yağlı Süt,fiber_100g,,,,,PASS
+171,Yarım Yağlı Süt,sugar_100g,4.89,4.89,0,0,PASS
+171,Yarım Yağlı Süt,sodium_mg_100g,39,39,0,0,PASS
+174,Yumurta (Sahanda),calories,196,196,0,0,PASS
+174,Yumurta (Sahanda),protein,13.61,13.61,0,0,PASS
+174,Yumurta (Sahanda),carbs,0.83,0.83,0,0,PASS
+174,Yumurta (Sahanda),fat,14.84,14.84,0,0,PASS
+174,Yumurta (Sahanda),fiber_100g,0,0,0,,PASS
+174,Yumurta (Sahanda),sugar_100g,0.4,0.4,0,0,PASS
+174,Yumurta (Sahanda),sodium_mg_100g,207,207,0,0,PASS
+216,Kaju (Çiğ),calories,564.664,564.664,0,0,PASS
+216,Kaju (Çiğ),protein,17.4423,17.4423,0,0,PASS
+216,Kaju (Çiğ),carbs,36.2887,36.2887,0,0,PASS
+216,Kaju (Çiğ),fat,38.86,38.86,0,0,PASS
+216,Kaju (Çiğ),fiber_100g,4.104,4.104,0,0,PASS
+216,Kaju (Çiğ),sugar_100g,,,,,PASS
+216,Kaju (Çiğ),sodium_mg_100g,4.759,4.759,0,0,PASS
+241,Espresso,calories,9,9,0,0,PASS
+241,Espresso,protein,0.12,0.12,0,0,PASS
+241,Espresso,carbs,1.67,1.67,0,0,PASS
+241,Espresso,fat,0.18,0.18,0,0,PASS
+241,Espresso,fiber_100g,0,0,0,,PASS
+241,Espresso,sugar_100g,0,0,0,,PASS
+241,Espresso,sodium_mg_100g,14,14,0,0,PASS
+242,Yağsız Süt,calories,34,34,0,0,PASS
+242,Yağsız Süt,protein,3.43,3.43,0,0,PASS
+242,Yağsız Süt,carbs,4.89,4.89,0,0,PASS
+242,Yağsız Süt,fat,0.08,0.08,0,0,PASS
+242,Yağsız Süt,fiber_100g,,,,,PASS
+242,Yağsız Süt,sugar_100g,5.05,5.05,0,0,PASS
+242,Yağsız Süt,sodium_mg_100g,41,41,0,0,PASS
+243,Portakal Suyu,calories,45,45,0,0,PASS
+243,Portakal Suyu,protein,0.7,0.7,0,0,PASS
+243,Portakal Suyu,carbs,10.4,10.4,0,0,PASS
+243,Portakal Suyu,fat,0.2,0.2,0,0,PASS
+243,Portakal Suyu,fiber_100g,0.2,0.2,0,0,PASS
+243,Portakal Suyu,sugar_100g,8.4,8.4,0,0,PASS
+243,Portakal Suyu,sodium_mg_100g,1,1,0,0,PASS
+244,Limon Suyu (Sıkma),calories,22,22,0,0,PASS
+244,Limon Suyu (Sıkma),protein,0.35,0.35,0,0,PASS
+244,Limon Suyu (Sıkma),carbs,6.9,6.9,0,0,PASS
+244,Limon Suyu (Sıkma),fat,0.24,0.24,0,0,PASS
+244,Limon Suyu (Sıkma),fiber_100g,0.3,0.3,0,0,PASS
+244,Limon Suyu (Sıkma),sugar_100g,2.52,2.52,0,0,PASS
+244,Limon Suyu (Sıkma),sodium_mg_100g,1,1,0,0,PASS
+245,Yaban Mersini,calories,63.8563,63.8563,0,0,PASS
+245,Yaban Mersini,protein,0.703125,0.703125,0,0,PASS
+245,Yaban Mersini,carbs,14.571775,14.571775,0,0,PASS
+245,Yaban Mersini,fat,0.3063,0.3063,0,0,PASS
+245,Yaban Mersini,fiber_100g,,,,,PASS
+245,Yaban Mersini,sugar_100g,9.356,9.356,0,0,PASS
+245,Yaban Mersini,sodium_mg_100g,0,0,0,,PASS
+246,Misket Limonu,calories,30,30,0,0,PASS
+246,Misket Limonu,protein,0.7,0.7,0,0,PASS
+246,Misket Limonu,carbs,10.54,10.54,0,0,PASS
+246,Misket Limonu,fat,0.2,0.2,0,0,PASS
+246,Misket Limonu,fiber_100g,2.8,2.8,0,0,PASS
+246,Misket Limonu,sugar_100g,1.69,1.69,0,0,PASS
+246,Misket Limonu,sodium_mg_100g,2,2,0,0,PASS
+247,Trabzon Hurması,calories,70,70,0,0,PASS
+247,Trabzon Hurması,protein,0.58,0.58,0,0,PASS
+247,Trabzon Hurması,carbs,18.59,18.59,0,0,PASS
+247,Trabzon Hurması,fat,0.19,0.19,0,0,PASS
+247,Trabzon Hurması,fiber_100g,3.6,3.6,0,0,PASS
+247,Trabzon Hurması,sugar_100g,12.53,12.53,0,0,PASS
+247,Trabzon Hurması,sodium_mg_100g,1,1,0,0,PASS
+248,Çarkıfelek,calories,97,97,0,0,PASS
+248,Çarkıfelek,protein,2.2,2.2,0,0,PASS
+248,Çarkıfelek,carbs,23.38,23.38,0,0,PASS
+248,Çarkıfelek,fat,0.7,0.7,0,0,PASS
+248,Çarkıfelek,fiber_100g,10.4,10.4,0,0,PASS
+248,Çarkıfelek,sugar_100g,11.2,11.2,0,0,PASS
+248,Çarkıfelek,sodium_mg_100g,28,28,0,0,PASS
+249,Kuru İncir,calories,249,249,0,0,PASS
+249,Kuru İncir,protein,3.3,3.3,0,0,PASS
+249,Kuru İncir,carbs,63.9,63.9,0,0,PASS
+249,Kuru İncir,fat,0.92,0.92,0,0,PASS
+249,Kuru İncir,fiber_100g,9.8,9.8,0,0,PASS
+249,Kuru İncir,sugar_100g,47.9,47.9,0,0,PASS
+249,Kuru İncir,sodium_mg_100g,10,10,0,0,PASS
+250,Kuru Erik,calories,240,240,0,0,PASS
+250,Kuru Erik,protein,2.18,2.18,0,0,PASS
+250,Kuru Erik,carbs,63.88,63.88,0,0,PASS
+250,Kuru Erik,fat,0.38,0.38,0,0,PASS
+250,Kuru Erik,fiber_100g,7.1,7.1,0,0,PASS
+250,Kuru Erik,sugar_100g,38.13,38.13,0,0,PASS
+250,Kuru Erik,sodium_mg_100g,2,2,0,0,PASS
+251,Turp,calories,16,16,0,0,PASS
+251,Turp,protein,0.68,0.68,0,0,PASS
+251,Turp,carbs,3.4,3.4,0,0,PASS
+251,Turp,fat,0.1,0.1,0,0,PASS
+251,Turp,fiber_100g,1.6,1.6,0,0,PASS
+251,Turp,sugar_100g,1.86,1.86,0,0,PASS
+251,Turp,sodium_mg_100g,39,39,0,0,PASS
+252,Brüksel Lahanası (Haşlanmış),calories,36,36,0,0,PASS
+252,Brüksel Lahanası (Haşlanmış),protein,2.55,2.55,0,0,PASS
+252,Brüksel Lahanası (Haşlanmış),carbs,7.1,7.1,0,0,PASS
+252,Brüksel Lahanası (Haşlanmış),fat,0.5,0.5,0,0,PASS
+252,Brüksel Lahanası (Haşlanmış),fiber_100g,2.6,2.6,0,0,PASS
+252,Brüksel Lahanası (Haşlanmış),sugar_100g,1.74,1.74,0,0,PASS
+252,Brüksel Lahanası (Haşlanmış),sodium_mg_100g,21,21,0,0,PASS
+253,Maydanoz (Taze),calories,36,36,0,0,PASS
+253,Maydanoz (Taze),protein,2.97,2.97,0,0,PASS
+253,Maydanoz (Taze),carbs,6.33,6.33,0,0,PASS
+253,Maydanoz (Taze),fat,0.79,0.79,0,0,PASS
+253,Maydanoz (Taze),fiber_100g,3.3,3.3,0,0,PASS
+253,Maydanoz (Taze),sugar_100g,0.85,0.85,0,0,PASS
+253,Maydanoz (Taze),sodium_mg_100g,56,56,0,0,PASS
+254,Dereotu (Taze),calories,43,43,0,0,PASS
+254,Dereotu (Taze),protein,3.46,3.46,0,0,PASS
+254,Dereotu (Taze),carbs,7.02,7.02,0,0,PASS
+254,Dereotu (Taze),fat,1.12,1.12,0,0,PASS
+254,Dereotu (Taze),fiber_100g,2.1,2.1,0,0,PASS
+254,Dereotu (Taze),sugar_100g,,,,,PASS
+254,Dereotu (Taze),sodium_mg_100g,61,61,0,0,PASS
+255,Kırmızı Lahana (Çiğ),calories,34.0538,34.0538,0,0,PASS
+255,Kırmızı Lahana (Çiğ),protein,1.2425,1.2425,0,0,PASS
+255,Kırmızı Lahana (Çiğ),carbs,6.7899,6.7899,0,0,PASS
+255,Kırmızı Lahana (Çiğ),fat,0.2138,0.2138,0,0,PASS
+255,Kırmızı Lahana (Çiğ),fiber_100g,,,,,PASS
+255,Kırmızı Lahana (Çiğ),sugar_100g,,,,,PASS
+255,Kırmızı Lahana (Çiğ),sodium_mg_100g,11.72,11.72,0,0,PASS
+256,Patates (Çiğ),calories,77,77,0,0,PASS
+256,Patates (Çiğ),protein,2.05,2.05,0,0,PASS
+256,Patates (Çiğ),carbs,17.49,17.49,0,0,PASS
+256,Patates (Çiğ),fat,0.09,0.09,0,0,PASS
+256,Patates (Çiğ),fiber_100g,2.1,2.1,0,0,PASS
+256,Patates (Çiğ),sugar_100g,0.82,0.82,0,0,PASS
+256,Patates (Çiğ),sodium_mg_100g,6,6,0,0,PASS
+257,Marul (Iceberg),calories,17.10875,17.10875,0,0,PASS
+257,Marul (Iceberg),protein,0.7425,0.7425,0,0,PASS
+257,Marul (Iceberg),carbs,3.36875,3.36875,0,0,PASS
+257,Marul (Iceberg),fat,0.07375,0.07375,0,0,PASS
+257,Marul (Iceberg),fiber_100g,,,,,PASS
+257,Marul (Iceberg),sugar_100g,,,,,PASS
+257,Marul (Iceberg),sodium_mg_100g,16.11,16.11,0,0,PASS
+258,Ispanak (Haşlanmış),calories,23,23,0,0,PASS
+258,Ispanak (Haşlanmış),protein,2.97,2.97,0,0,PASS
+258,Ispanak (Haşlanmış),carbs,3.75,3.75,0,0,PASS
+258,Ispanak (Haşlanmış),fat,0.26,0.26,0,0,PASS
+258,Ispanak (Haşlanmış),fiber_100g,2.4,2.4,0,0,PASS
+258,Ispanak (Haşlanmış),sugar_100g,0.43,0.43,0,0,PASS
+258,Ispanak (Haşlanmış),sodium_mg_100g,70,70,0,0,PASS
+259,Biber (Kırmızı Çiğ),calories,31.3256,31.3256,0,0,PASS
+259,Biber (Kırmızı Çiğ),protein,0.895625,0.895625,0,0,PASS
+259,Biber (Kırmızı Çiğ),carbs,6.653175,6.653175,0,0,PASS
+259,Biber (Kırmızı Çiğ),fat,0.1256,0.1256,0,0,PASS
+259,Biber (Kırmızı Çiğ),fiber_100g,1.158,1.158,0,0,PASS
+259,Biber (Kırmızı Çiğ),sugar_100g,,,,,PASS
+259,Biber (Kırmızı Çiğ),sodium_mg_100g,0,0,0,,PASS
+260,Biber (Yeşil Çiğ),calories,22.9291,22.9291,0,0,PASS
+260,Biber (Yeşil Çiğ),protein,0.715,0.715,0,0,PASS
+260,Biber (Yeşil Çiğ),carbs,4.7781,4.7781,0,0,PASS
+260,Biber (Yeşil Çiğ),fat,0.1063,0.1063,0,0,PASS
+260,Biber (Yeşil Çiğ),fiber_100g,0.9419,0.9419,0,0,PASS
+260,Biber (Yeşil Çiğ),sugar_100g,,,,,PASS
+260,Biber (Yeşil Çiğ),sodium_mg_100g,0,0,0,,PASS
+261,Havuç (Haşlanmış),calories,35,35,0,0,PASS
+261,Havuç (Haşlanmış),protein,0.76,0.76,0,0,PASS
+261,Havuç (Haşlanmış),carbs,8.22,8.22,0,0,PASS
+261,Havuç (Haşlanmış),fat,0.18,0.18,0,0,PASS
+261,Havuç (Haşlanmış),fiber_100g,3,3,0,0,PASS
+261,Havuç (Haşlanmış),sugar_100g,3.45,3.45,0,0,PASS
+261,Havuç (Haşlanmış),sodium_mg_100g,58,58,0,0,PASS
+262,Kereviz Sapı (Çiğ),calories,16.6973,16.6973,0,0,PASS
+262,Kereviz Sapı (Çiğ),protein,0.4921875,0.4921875,0,0,PASS
+262,Kereviz Sapı (Çiğ),carbs,3.3165125,3.3165125,0,0,PASS
+262,Kereviz Sapı (Çiğ),fat,0.1625,0.1625,0,0,PASS
+262,Kereviz Sapı (Çiğ),fiber_100g,,,,,PASS
+262,Kereviz Sapı (Çiğ),sugar_100g,,,,,PASS
+262,Kereviz Sapı (Çiğ),sodium_mg_100g,97.21,97.21,0,0,PASS
+263,Patates (Fırın),calories,93,93,0,0,PASS
+263,Patates (Fırın),protein,2.5,2.5,0,0,PASS
+263,Patates (Fırın),carbs,21.15,21.15,0,0,PASS
+263,Patates (Fırın),fat,0.13,0.13,0,0,PASS
+263,Patates (Fırın),fiber_100g,2.2,2.2,0,0,PASS
+263,Patates (Fırın),sugar_100g,1.18,1.18,0,0,PASS
+263,Patates (Fırın),sodium_mg_100g,10,10,0,0,PASS
+264,Tatlı Patates (Fırın),calories,90,90,0,0,PASS
+264,Tatlı Patates (Fırın),protein,2.01,2.01,0,0,PASS
+264,Tatlı Patates (Fırın),carbs,20.71,20.71,0,0,PASS
+264,Tatlı Patates (Fırın),fat,0.15,0.15,0,0,PASS
+264,Tatlı Patates (Fırın),fiber_100g,3.3,3.3,0,0,PASS
+264,Tatlı Patates (Fırın),sugar_100g,6.48,6.48,0,0,PASS
+264,Tatlı Patates (Fırın),sodium_mg_100g,36,36,0,0,PASS
+265,Enginar (Haşlanmış),calories,53,53,0,0,PASS
+265,Enginar (Haşlanmış),protein,2.89,2.89,0,0,PASS
+265,Enginar (Haşlanmış),carbs,11.95,11.95,0,0,PASS
+265,Enginar (Haşlanmış),fat,0.34,0.34,0,0,PASS
+265,Enginar (Haşlanmış),fiber_100g,5.7,5.7,0,0,PASS
+265,Enginar (Haşlanmış),sugar_100g,0.99,0.99,0,0,PASS
+265,Enginar (Haşlanmış),sodium_mg_100g,60,60,0,0,PASS
+266,Pancar (Haşlanmış),calories,44,44,0,0,PASS
+266,Pancar (Haşlanmış),protein,1.68,1.68,0,0,PASS
+266,Pancar (Haşlanmış),carbs,9.96,9.96,0,0,PASS
+266,Pancar (Haşlanmış),fat,0.18,0.18,0,0,PASS
+266,Pancar (Haşlanmış),fiber_100g,2,2,0,0,PASS
+266,Pancar (Haşlanmış),sugar_100g,7.96,7.96,0,0,PASS
+266,Pancar (Haşlanmış),sodium_mg_100g,77,77,0,0,PASS
+267,Lahana (Çiğ),calories,25,25,0,0,PASS
+267,Lahana (Çiğ),protein,1.28,1.28,0,0,PASS
+267,Lahana (Çiğ),carbs,5.8,5.8,0,0,PASS
+267,Lahana (Çiğ),fat,0.1,0.1,0,0,PASS
+267,Lahana (Çiğ),fiber_100g,2.5,2.5,0,0,PASS
+267,Lahana (Çiğ),sugar_100g,3.2,3.2,0,0,PASS
+267,Lahana (Çiğ),sodium_mg_100g,18,18,0,0,PASS
+268,Dana Kıyma (Pişmiş),calories,240,240,0,0,PASS
+268,Dana Kıyma (Pişmiş),protein,25.07,25.07,0,0,PASS
+268,Dana Kıyma (Pişmiş),carbs,0.62,0.62,0,0,PASS
+268,Dana Kıyma (Pişmiş),fat,14.53,14.53,0,0,PASS
+268,Dana Kıyma (Pişmiş),fiber_100g,0,0,0,,PASS
+268,Dana Kıyma (Pişmiş),sugar_100g,0,0,0,,PASS
+268,Dana Kıyma (Pişmiş),sodium_mg_100g,85,85,0,0,PASS
+269,Parmesan Peyniri,calories,392,392,0,0,PASS
+269,Parmesan Peyniri,protein,35.75,35.75,0,0,PASS
+269,Parmesan Peyniri,carbs,3.22,3.22,0,0,PASS
+269,Parmesan Peyniri,fat,25,25,0,0,PASS
+269,Parmesan Peyniri,fiber_100g,0,0,0,,PASS
+269,Parmesan Peyniri,sugar_100g,0.11,0.11,0,0,PASS
+269,Parmesan Peyniri,sodium_mg_100g,1175,1175,0,0,PASS
+270,Cheddar Peyniri,calories,408,408,0,0,PASS
+270,Cheddar Peyniri,protein,23.3,23.3,0,0,PASS
+270,Cheddar Peyniri,carbs,2.44,2.44,0,0,PASS
+270,Cheddar Peyniri,fat,34,34,0,0,PASS
+270,Cheddar Peyniri,fiber_100g,,,,,PASS
+270,Cheddar Peyniri,sugar_100g,0.33,0.33,0,0,PASS
+270,Cheddar Peyniri,sodium_mg_100g,654,654,0,0,PASS
+271,Yoğurt (Yağsız),calories,50.0015,50.0015,0,0,PASS
+271,Yoğurt (Yağsız),protein,4.22675,4.22675,0,0,PASS
+271,Yoğurt (Yağsız),carbs,8.07675,8.07675,0,0,PASS
+271,Yoğurt (Yağsız),fat,0.0875,0.0875,0,0,PASS
+271,Yoğurt (Yağsız),fiber_100g,,,,,PASS
+271,Yoğurt (Yağsız),sugar_100g,,,,,PASS
+271,Yoğurt (Yağsız),sodium_mg_100g,51.48,51.48,0,0,PASS
+272,Bulgur (Kuru),calories,372.341,372.341,0,0,PASS
+272,Bulgur (Kuru),protein,11.75625,11.75625,0,0,PASS
+272,Bulgur (Kuru),carbs,75.88175,75.88175,0,0,PASS
+272,Bulgur (Kuru),fat,2.421,2.421,0,0,PASS
+272,Bulgur (Kuru),fiber_100g,11.72,11.72,0,0,PASS
+272,Bulgur (Kuru),sugar_100g,,,,,PASS
+272,Bulgur (Kuru),sodium_mg_100g,2.18,2.18,0,0,PASS
+273,Bulgur (Haşlanmış),calories,83,83,0,0,PASS
+273,Bulgur (Haşlanmış),protein,3.08,3.08,0,0,PASS
+273,Bulgur (Haşlanmış),carbs,18.58,18.58,0,0,PASS
+273,Bulgur (Haşlanmış),fat,0.24,0.24,0,0,PASS
+273,Bulgur (Haşlanmış),fiber_100g,4.5,4.5,0,0,PASS
+273,Bulgur (Haşlanmış),sugar_100g,0.1,0.1,0,0,PASS
+273,Bulgur (Haşlanmış),sodium_mg_100g,5,5,0,0,PASS
+274,Nohut (Kuru),calories,382.998,382.998,0,0,PASS
+274,Nohut (Kuru),protein,21.275,21.275,0,0,PASS
+274,Nohut (Kuru),carbs,60.358,60.358,0,0,PASS
+274,Nohut (Kuru),fat,6.274,6.274,0,0,PASS
+274,Nohut (Kuru),fiber_100g,,,,,PASS
+274,Nohut (Kuru),sugar_100g,,,,,PASS
+274,Nohut (Kuru),sodium_mg_100g,8.779,8.779,0,0,PASS
+275,Hindistan Cevizi Yağı,calories,833,833,0,0,PASS
+275,Hindistan Cevizi Yağı,protein,0,0,0,,PASS
+275,Hindistan Cevizi Yağı,carbs,0.84,0.84,0,0,PASS
+275,Hindistan Cevizi Yağı,fat,99.1,99.1,0,0,PASS
+275,Hindistan Cevizi Yağı,fiber_100g,,,,,PASS
+275,Hindistan Cevizi Yağı,sugar_100g,,,,,PASS
+275,Hindistan Cevizi Yağı,sodium_mg_100g,0,0,0,,PASS
+276,Tereyağı (Tuzsuz),calories,717,717,0,0,PASS
+276,Tereyağı (Tuzsuz),protein,0.85,0.85,0,0,PASS
+276,Tereyağı (Tuzsuz),carbs,0.06,0.06,0,0,PASS
+276,Tereyağı (Tuzsuz),fat,81.11,81.11,0,0,PASS
+276,Tereyağı (Tuzsuz),fiber_100g,0,0,0,,PASS
+276,Tereyağı (Tuzsuz),sugar_100g,0.06,0.06,0,0,PASS
+276,Tereyağı (Tuzsuz),sodium_mg_100g,11,11,0,0,PASS

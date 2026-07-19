@@ -1,68 +1,103 @@
 /**
- * Kalorimetre MASTER Food Database — MVP Nutrition Dataset
- *
- * Source of truth: natural serving macros (NOT per 100 g).
- * calories / protein / carbs / fat = values for serving_size (e.g. "1 Kase").
- * calories always equals Atwater sum: 4×Protein + 4×Carbs + 9×Fat.
- *
- * FOOD_DB is a legacy projection for UI calcPreview / unit scaling.
+ * Kalorimetre food catalog — USDA-activated local catalog (276 foods).
+ * Activated from scripts/output/foodDatabase.usda-preview.js
+ * Backup: scripts/backups/foodDatabase.pre-usda-activation.js
+ * Rollback: node scripts/rollbackUsdaCatalogActivation.mjs
  */
 
-/** Atwater general factors */
+/** Atwater general factors — reference only; preview calories use USDA per-100g scaling. */
 export function macroCalories(protein, carbs, fat) {
   return Math.round(protein * 4 + carbs * 4 + fat * 9)
 }
 
-/** Default review metadata for catalog entries pending source verification. */
 export const CATALOG_REVIEW = {
   source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
   source_name: 'foodDatabase.js',
   source_food_id: null,
   review_status: 'pending_verification',
   notes: null,
-}
+};
 
-/** @deprecated Use CATALOG_REVIEW — kept for import compatibility. */
-export const PENDING_REVIEW = CATALOG_REVIEW
+export const PENDING_REVIEW = CATALOG_REVIEW;
+export const LEGACY_REVIEW = CATALOG_REVIEW;
 
-/** @deprecated Use CATALOG_REVIEW — kept for import compatibility. */
-export const LEGACY_REVIEW = CATALOG_REVIEW
-
-/** Parse "1 Kase" → { qty: 1, unit: "Kase" } */
 export function parseServingSize(servingSize) {
   const m = String(servingSize || '').match(/^(\d+(?:\.\d+)?)\s+(.+)$/)
   if (m) return { qty: parseFloat(m[1]), unit: m[2] }
   return { qty: 1, unit: servingSize || 'Porsiyon' }
 }
 
-/** Build legacy FOOD_DB row from a master entry (UI basket scaling). */
 export function toLegacyFood(master) {
   const { unit } = parseServingSize(master.serving_size)
   const mult = Math.max(master.serving_grams / 100, 0.01)
+  const source100 = master.usda_per_100g
+  const servingMult = master.serving_grams / 100
+
+  const units = { Gram: 0.01 }
+  if (unit !== 'Gram') units[unit] = mult
+
+  if (Array.isArray(master.portions)) {
+    for (const portion of master.portions) {
+      const { unit: pUnit } = parseServingSize(portion.label)
+      if (pUnit === 'Gram') continue
+      const pMult = Math.max(portion.grams / 100, 0.01)
+      if (!(pUnit in units)) units[pUnit] = pMult
+    }
+  }
+
+  const calories100 = source100?.calories ?? master.calories / mult
+  const protein100 = source100?.protein ?? master.protein / mult
+  const carbs100 = source100?.carbs ?? master.carbs / mult
+  const fat100 = source100?.fat ?? master.fat / mult
+  const fiber100 = source100?.fiber ?? master.fiber_100g ?? null
+  const sugar100 = source100?.sugar ?? master.sugar_100g ?? null
+  const sodium100 = source100?.sodium_mg ?? master.sodium_mg_100g ?? null
+
+  const naturalCalories = source100 ? source100.calories * servingMult : master.calories
+  const naturalProtein = source100 ? source100.protein * servingMult : master.protein
+  const naturalCarbs = source100 ? source100.carbs * servingMult : master.carbs
+  const naturalFat = source100 ? source100.fat * servingMult : master.fat
+  const naturalFiber = fiber100 == null ? null : fiber100 * (source100 ? servingMult : mult)
+  const naturalSugar = sugar100 == null ? null : sugar100 * (source100 ? servingMult : mult)
+  const naturalSodium = sodium100 == null ? null : sodium100 * (source100 ? servingMult : mult)
 
   const legacy = {
     id: master.id,
     slug: master.slug,
     name: master.name,
     category: master.category ?? null,
-    calories: master.calories / mult,
-    protein: master.protein / mult,
-    carbs: master.carbs / mult,
-    fat: master.fat / mult,
-    units: { Gram: 0.01, [unit]: mult },
+    calories: calories100,
+    protein: protein100,
+    carbs: carbs100,
+    fat: fat100,
+    fiber_100g: fiber100,
+    sugar_100g: sugar100,
+    sodium_mg_100g: sodium100,
+    fiber: naturalFiber,
+    sugar: naturalSugar,
+    sodium_mg: naturalSodium,
+    units,
     tags: master.tags ?? [],
     serving_size: master.serving_size,
     data_source: master.data_source,
     review: master.review ?? CATALOG_REVIEW,
     _natural: {
-      calories: master.calories,
-      protein: master.protein,
-      carbs: master.carbs,
-      fat: master.fat,
+      calories: naturalCalories,
+      protein: naturalProtein,
+      carbs: naturalCarbs,
+      fat: naturalFat,
+      fiber_100g: fiber100,
+      sugar_100g: sugar100,
+      sodium_mg_100g: sodium100,
+      fiber: naturalFiber,
+      sugar: naturalSugar,
+      sodium_mg: naturalSodium,
       unit,
       grams: master.serving_grams,
     },
   }
+
+  if (master.usda_per_100g) legacy.usda_per_100g = master.usda_per_100g
 
   if (unit === 'Bardak' || unit === 'Fincan' || unit === 'Su Bardağı') {
     legacy.units.Mililitre = 0.01
@@ -84,7 +119,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -93,7 +133,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 2,
     slug: 'tavuk_gogsu_izgara',
@@ -106,16 +145,22 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '1276',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). USDA lif/şeker/sodyum 0; hayvan ürünü — sodyum eksik veri olabilir, bekletildi.',
-    }
+    },
   },
-
   {
     id: 3,
     slug: 'yulaf_ezmesi',
@@ -131,7 +176,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
@@ -139,9 +191,8 @@ export const MASTER_FOOD_DB = [
       review_status: 'macro_verified_usda',
       micronutrient_basic_status: 'fiber_sugar_sodium_partial_verified',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Lif/şeker/sodyum USDA ile güncellendi.',
-    }
+    },
   },
-
   {
     id: 4,
     slug: 'mercimek_corbasi',
@@ -154,7 +205,17 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -163,7 +224,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 5,
     slug: 'tam_bugday_ekmek',
@@ -176,7 +236,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 35,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -185,29 +252,67 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 6,
     slug: 'haslanmis_yumurta',
-    name: 'Haşlanmış Yumurta',
+    name: 'Yumurta (Haşlanmış)',
     category: 'Yumurta',
-    calories: 71,
-    protein: 6,
-    carbs: 0.6,
-    fat: 5,
+    calories: 77.5,
+    protein: 6.29,
+    carbs: 0.56,
+    fat: 5.305,
+    fiber_100g: 0,
+    sugar_100g: 1.12,
+    sodium_mg_100g: 124,
     serving_size: '1 Adet',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
+    search_aliases: [
+      'Haşlanmış Yumurta',
+    ],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 50,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Adet (büyük)',
+        grams: 50,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'pending_verification',
-      notes: 'Kaynak bulunana kadar pending kalsın Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '173424',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_209). FDC 173424. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 155,
+      protein: 12.58,
+      carbs: 1.12,
+      fat: 10.61,
+      fiber: 0,
+      sugar: 1.12,
+      sodium_mg: 124,
     },
   },
-
   {
     id: 7,
     slug: 'pirinc_pilavi',
@@ -220,7 +325,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -229,7 +341,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 8,
     slug: 'kuru_fasulye',
@@ -242,7 +353,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -251,7 +371,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 9,
     slug: 'zeytinyagli_salata',
@@ -264,7 +383,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Akdeniz',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -273,31 +400,62 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 10,
     slug: 'tam_yagli_sut',
     name: 'Tam Yağlı Süt',
     category: 'Süt Ürünleri',
-    calories: 129,
-    protein: 6.6,
-    carbs: 9.3,
-    fat: 7.3,
-    sodium_mg_100g: 49,
+    calories: 120,
+    protein: 6.56,
+    carbs: 9.34,
+    fat: 6.4,
+    sugar_100g: 4.81,
+    sodium_mg_100g: 38,
     serving_size: '1 Su Bardağı',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Su Bardağı',
+        grams: 200,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak',
+        grams: 229,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
-      source_food_id: '5123',
-      review_status: 'macro_verified_usda',
-      micronutrient_basic_status: 'fiber_sugar_sodium_partial_verified',
-      notes: 'Makrolar USDA ile güncellendi (2026-07-14). Sodyum USDA ile güncellendi; şeker (laktoz) USDA 0 eksik veri, bekletildi.',
-    }
+      source_food_id: '322892',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_021). FDC 322892. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 60,
+      protein: 3.28,
+      carbs: 4.67,
+      fat: 3.2,
+      fiber: null,
+      sugar: 4.81,
+      sodium_mg: 38,
+    },
   },
-
   {
     id: 11,
     slug: 'somon_izgara',
@@ -310,7 +468,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Akdeniz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Akdeniz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -319,73 +484,187 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 12,
     slug: 'kinoa',
-    name: 'Kinoa',
+    name: 'Kinoa (Haşlanmış)',
     category: 'Tahıl & Ekmek',
-    calories: 178,
-    protein: 6.6,
-    carbs: 31.5,
-    fat: 2.8,
+    calories: 180,
+    protein: 6.6000000000000005,
+    carbs: 31.950000000000003,
+    fat: 2.88,
+    fiber_100g: 2.8,
+    sugar_100g: 0.87,
+    sodium_mg_100g: 7,
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Düşük GI',
+    ],
+    search_aliases: [
+      'Kinoa',
+    ],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 150,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak',
+        grams: 185,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168917',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_266). FDC 168917. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 120,
+      protein: 4.4,
+      carbs: 21.3,
+      fat: 1.92,
+      fiber: 2.8,
+      sugar: 0.87,
+      sodium_mg: 7,
     },
   },
-
   {
     id: 13,
     slug: 'avokado',
     name: 'Avokado',
     category: 'Meyve',
-    calories: 261,
+    calories: 240,
     protein: 3,
-    carbs: 12.8,
-    fat: 22,
+    carbs: 12.794999999999998,
+    fat: 21.990000000000002,
+    fiber_100g: 6.7,
+    sugar_100g: 0.66,
+    sodium_mg_100g: 7,
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Keto', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Keto',
+      'Akdeniz',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 150,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak (dilimlenmiş)',
+        grams: 146,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
-      source_food_id: '6009',
-      review_status: 'macro_verified_usda',
-      notes: 'Makrolar USDA ile güncellendi (2026-07-14). Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.',
-    }
+      source_food_id: '171705',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_123). FDC 171705. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 160,
+      protein: 2,
+      carbs: 8.53,
+      fat: 14.66,
+      fiber: 6.7,
+      sugar: 0.66,
+      sodium_mg: 7,
+    },
   },
-
   {
     id: 14,
     slug: 'yogurt_tam_yagli',
     name: 'Yoğurt (Tam Yağlı)',
     category: 'Süt Ürünleri',
-    calories: 94,
-    protein: 5.3,
-    carbs: 7.1,
-    fat: 4.9,
+    calories: 116.92859999999999,
+    protein: 5.736257999999999,
+    carbs: 8.362392,
+    fat: 6.726,
+    sugar_100g: 4.0936,
+    sodium_mg_100g: 41.78,
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 150,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2259793',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_236). FDC 2259793. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 77.9524,
+      protein: 3.824172,
+      carbs: 5.574928,
+      fat: 4.484,
+      fiber: null,
+      sugar: 4.0936,
+      sodium_mg: 41.78,
     },
   },
-
   {
     id: 15,
     slug: 'nohut_haslanmis',
@@ -398,7 +677,17 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -407,51 +696,128 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 16,
     slug: 'badem',
-    name: 'Badem',
+    name: 'Badem (Çiğ)',
     category: 'Kuruyemiş',
-    calories: 8,
-    protein: 0.3,
-    carbs: 0.3,
-    fat: 0.6,
+    calories: 7.509,
+    protein: 0.25740456,
+    carbs: 0.24041544,
+    fat: 0.6130800000000001,
+    fiber_100g: 10.78,
+    sodium_mg_100g: 0,
     serving_size: '1 Adet',
     serving_grams: 1.2,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Keto', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Keto',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
+    search_aliases: [
+      'Badem',
+    ],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 1.2,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2346393',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_300). FDC 2346393. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 625.75,
+      protein: 21.45038,
+      carbs: 20.03462,
+      fat: 51.09,
+      fiber: 10.78,
+      sugar: null,
+      sodium_mg: 0,
     },
   },
-
   {
     id: 17,
     slug: 'ispanak_cig',
     name: 'Ispanak (Çiğ)',
     category: 'Sebze',
-    calories: 12,
-    protein: 1.2,
-    carbs: 1.4,
-    fat: 0.2,
+    calories: 9.200000000000001,
+    protein: 1.144,
+    carbs: 1.452,
+    fat: 0.15600000000000003,
+    fiber_100g: 2.2,
+    sugar_100g: 0.42,
+    sodium_mg_100g: 79,
     serving_size: '1 Kase',
     serving_grams: 40,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Akdeniz',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 40,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak',
+        grams: 30,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168462',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_158). FDC 168462. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 23,
+      protein: 2.86,
+      carbs: 3.63,
+      fat: 0.39,
+      fiber: 2.2,
+      sugar: 0.42,
+      sodium_mg: 79,
     },
   },
-
   {
     id: 18,
     slug: 'tatli_patates',
@@ -464,7 +830,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -473,7 +848,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 19,
     slug: 'lor_peyniri',
@@ -486,7 +860,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Yemek Kaşığı',
     serving_grams: 15,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -495,29 +875,67 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 20,
     slug: 'zeytinyagi',
     name: 'Zeytinyağı',
     category: 'Yağ & Sos',
-    calories: 135,
+    calories: 132.6,
     protein: 0,
     carbs: 0,
     fat: 15,
+    fiber_100g: 0,
+    sugar_100g: 0,
+    sodium_mg_100g: 2,
     serving_size: '1 Yemek Kaşığı',
     serving_grams: 15,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Keto', 'Akdeniz', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Keto',
+      'Akdeniz',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Yemek Kaşığı',
+        grams: 15,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Yemek Kaşığı (USDA 13.5g)',
+        grams: 13.5,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
-      source_food_id: '5877',
-      review_status: 'macro_verified_usda',
-      notes: 'Makrolar USDA ile güncellendi (2026-07-14). Yağ ürünü; lif/şeker/sodyum alanı eklenmedi (0 değerleri anlamlı).',
-    }
+      source_food_id: '171413',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_313). FDC 171413. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 884,
+      protein: 0,
+      carbs: 0,
+      fat: 100,
+      fiber: 0,
+      sugar: 0,
+      sodium_mg: 2,
+    },
   },
-
   {
     id: 21,
     slug: 'simit',
@@ -530,7 +948,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -539,7 +963,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 22,
     slug: 'beyaz_peynir',
@@ -552,7 +975,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -561,7 +991,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 23,
     slug: 'menemen',
@@ -574,7 +1003,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -583,7 +1019,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 24,
     slug: 'omlet',
@@ -596,7 +1031,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 80,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -605,7 +1048,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 25,
     slug: 'pogaca_peynirli',
@@ -618,7 +1060,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 80,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -627,7 +1073,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 26,
     slug: 'doner_tavuk',
@@ -640,7 +1085,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -649,7 +1100,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 27,
     slug: 'doner_et',
@@ -662,7 +1112,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -671,7 +1127,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 28,
     slug: 'lahmacun',
@@ -684,7 +1139,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -693,7 +1152,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 29,
     slug: 'pide_kasarli',
@@ -706,7 +1164,10 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -715,7 +1176,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 30,
     slug: 'borek_peynirli_firin',
@@ -728,7 +1188,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 80,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -737,7 +1201,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 31,
     slug: 'manti',
@@ -750,7 +1213,10 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 300,
     data_source: 'MASTER_DB',
-    tags: ['Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -759,7 +1225,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 32,
     slug: 'i_skender_kebap',
@@ -772,7 +1237,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 350,
     data_source: 'MASTER_DB',
-    tags: ['Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -781,7 +1250,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 33,
     slug: 'bulgur_pilavi',
@@ -794,7 +1262,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -803,7 +1278,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 34,
     slug: 'makarna_haslanmis',
@@ -816,7 +1290,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -825,7 +1305,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 35,
     slug: 'domates_corbasi',
@@ -838,7 +1317,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -847,7 +1334,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 36,
     slug: 'tavuk_corbasi',
@@ -860,7 +1346,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -869,7 +1360,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 37,
     slug: 'ayran',
@@ -882,7 +1372,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Bardak',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -891,7 +1386,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 38,
     slug: 'turk_cayi_sekersiz',
@@ -904,7 +1398,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Bardak',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -913,7 +1414,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 39,
     slug: 'turk_kahvesi_sade',
@@ -926,7 +1426,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Fincan',
     serving_grams: 60,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -935,7 +1442,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 40,
     slug: 'tost_kasarli',
@@ -948,7 +1454,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -957,7 +1467,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 41,
     slug: 'karniyarik',
@@ -970,7 +1479,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -979,7 +1494,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 42,
     slug: 'cacik',
@@ -992,7 +1506,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1001,7 +1521,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 43,
     slug: 'baklava',
@@ -1014,7 +1533,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 40,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1023,7 +1546,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 44,
     slug: 'kunefe',
@@ -1036,7 +1558,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1045,7 +1571,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 45,
     slug: 'elma',
@@ -1061,7 +1586,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 180,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
@@ -1069,9 +1603,8 @@ export const MASTER_FOOD_DB = [
       review_status: 'macro_verified_usda',
       micronutrient_basic_status: 'fiber_sugar_sodium_partial_verified',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Lif/şeker/sodyum USDA ile güncellendi.',
-    }
+    },
   },
-
   {
     id: 46,
     slug: 'muz',
@@ -1087,7 +1620,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
@@ -1095,9 +1636,8 @@ export const MASTER_FOOD_DB = [
       review_status: 'macro_verified_usda',
       micronutrient_basic_status: 'fiber_sugar_sodium_partial_verified',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Lif/şeker/sodyum USDA ile güncellendi.',
-    }
+    },
   },
-
   {
     id: 47,
     slug: 'cig_kofte_ev_yapimi',
@@ -1110,7 +1650,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1119,7 +1666,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 48,
     slug: 'gozleme_peynirli',
@@ -1132,7 +1678,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1141,7 +1691,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 49,
     slug: 'portakal',
@@ -1156,7 +1705,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
@@ -1164,31 +1722,68 @@ export const MASTER_FOOD_DB = [
       review_status: 'macro_verified_usda',
       micronutrient_basic_status: 'fiber_sugar_sodium_partial_verified',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Lif ve sodyum güncellendi; şeker USDA 0 eksik veri (meyve), bekletildi.',
-    }
+    },
   },
-
   {
     id: 50,
     slug: 'mandalina',
     name: 'Mandalina',
     category: 'Meyve',
-    calories: 44,
-    protein: 0.6,
-    carbs: 10,
-    fat: 0.2,
+    calories: 39.75,
+    protein: 0.6075,
+    carbs: 10.004999999999999,
+    fat: 0.23249999999999998,
+    fiber_100g: 1.8,
+    sugar_100g: 10.58,
+    sodium_mg_100g: 2,
     serving_size: '1 Adet',
     serving_grams: 75,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 75,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Adet Mandalina (orta; yaklaşık 6,4 Cm Çap)',
+        grams: 88,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'pending_verification',
-      notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169105',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_125). FDC 169105. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 53,
+      protein: 0.81,
+      carbs: 13.34,
+      fat: 0.31,
+      fiber: 1.8,
+      sugar: 10.58,
+      sodium_mg: 2,
     },
   },
-
   {
     id: 51,
     slug: 'cilek',
@@ -1201,16 +1796,24 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '6495',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.',
-    }
+    },
   },
-
   {
     id: 52,
     slug: 'uzum',
@@ -1223,7 +1826,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1232,7 +1842,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 53,
     slug: 'karpuz',
@@ -1245,16 +1854,23 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '2640',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.',
-    }
+    },
   },
-
   {
     id: 54,
     slug: 'kavun',
@@ -1267,7 +1883,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1276,7 +1900,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 55,
     slug: 'armut',
@@ -1292,7 +1915,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 170,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
@@ -1300,9 +1931,8 @@ export const MASTER_FOOD_DB = [
       review_status: 'macro_verified_usda',
       micronutrient_basic_status: 'fiber_sugar_sodium_partial_verified',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Lif/şeker/sodyum USDA ile güncellendi.',
-    }
+    },
   },
-
   {
     id: 56,
     slug: 'kiraz',
@@ -1315,7 +1945,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1324,7 +1962,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 57,
     slug: 'erik',
@@ -1337,7 +1974,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 65,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1346,7 +1991,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 58,
     slug: 'i_ncir_taze',
@@ -1359,7 +2003,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1368,7 +2020,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 59,
     slug: 'nar',
@@ -1381,7 +2032,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1390,7 +2050,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 60,
     slug: 'kivi',
@@ -1403,7 +2062,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 75,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1412,29 +2079,66 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 61,
     slug: 'ananas',
     name: 'Ananas',
     category: 'Meyve',
-    calories: 55,
-    protein: 0.5,
-    carbs: 13.1,
-    fat: 0.1,
+    calories: 60.1113,
+    protein: 0.4609375,
+    carbs: 14.0914625,
+    fat: 0.2113,
+    fiber_100g: 0.9346,
+    sugar_100g: 11.42,
+    sodium_mg_100g: 0,
     serving_size: '1 Dilim',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Dilim',
+        grams: 100,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2346398',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_121). FDC 2346398. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 60.1113,
+      protein: 0.4609375,
+      carbs: 14.0914625,
+      fat: 0.2113,
+      fiber: 0.9346,
+      sugar: 11.42,
+      sodium_mg: 0,
     },
   },
-
   {
     id: 62,
     slug: 'kayisi_taze',
@@ -1447,7 +2151,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 35,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1456,7 +2168,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 63,
     slug: 'hurma_medjool',
@@ -1469,7 +2180,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 24,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1478,7 +2196,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 64,
     slug: 'greyfurt',
@@ -1491,7 +2208,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1500,51 +2225,129 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 65,
     slug: 'domates',
-    name: 'Domates',
+    name: 'Domates (Çiğ)',
     category: 'Sebze',
-    calories: 25,
-    protein: 1.1,
-    carbs: 4.7,
-    fat: 0.2,
+    calories: 21.599999999999998,
+    protein: 1.056,
+    carbs: 4.668,
+    fat: 0.24,
+    fiber_100g: 1.2,
+    sugar_100g: 2.63,
+    sodium_mg_100g: 5,
     serving_size: '1 Adet',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Düşük GI',
+    ],
+    search_aliases: [
+      'Domates',
+    ],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 120,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Adet Orta Boy Bütün Domates (yaklaşık 6,6 Cm Çap)',
+        grams: 123,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170457',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_169). FDC 170457. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 18,
+      protein: 0.88,
+      carbs: 3.89,
+      fat: 0.2,
+      fiber: 1.2,
+      sugar: 2.63,
+      sodium_mg: 5,
     },
   },
-
   {
     id: 66,
     slug: 'salatalik',
-    name: 'Salatalık',
+    name: 'Salatalık (Çiğ)',
     category: 'Sebze',
-    calories: 36,
-    protein: 1.4,
-    carbs: 7.2,
-    fat: 0.2,
+    calories: 31.815,
+    protein: 1.25,
+    carbs: 5.905,
+    fat: 0.355,
+    sodium_mg_100g: 1.515,
     serving_size: '1 Adet',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
+    search_aliases: [
+      'Salatalık',
+    ],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 200,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2346406',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_168). FDC 2346406. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 15.9075,
+      protein: 0.625,
+      carbs: 2.9525,
+      fat: 0.1775,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 1.515,
     },
   },
-
   {
     id: 67,
     slug: 'marul',
@@ -1557,85 +2360,208 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '6163',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.',
-    }
+    },
   },
-
   {
     id: 68,
     slug: 'havuc',
-    name: 'Havuç',
+    name: 'Havuç (Çiğ)',
     category: 'Sebze',
-    calories: 25,
-    protein: 0.5,
-    carbs: 5.4,
-    fat: 0.1,
-    fiber_100g: 2.694,
-    sodium_mg_100g: 62.66,
+    calories: 24.599999999999998,
+    protein: 0.558,
+    carbs: 5.748,
+    fat: 0.144,
+    fiber_100g: 2.8,
+    sugar_100g: 4.74,
+    sodium_mg_100g: 69,
     serving_size: '1 Adet',
     serving_grams: 60,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+    ],
+    search_aliases: [
+      'Havuç',
+    ],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 60,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Adet (orta)',
+        grams: 61,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
-      source_food_id: '6153',
-      review_status: 'macro_verified_usda',
-      micronutrient_basic_status: 'fiber_sugar_sodium_partial_verified',
-      notes: 'Makrolar USDA ile güncellendi (2026-07-14). Lif ve sodyum güncellendi; şeker USDA 0 eksik veri, bekletildi.',
-    }
+      source_food_id: '170393',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_170). FDC 170393. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 41,
+      protein: 0.93,
+      carbs: 9.58,
+      fat: 0.24,
+      fiber: 2.8,
+      sugar: 4.74,
+      sodium_mg: 69,
+    },
   },
-
   {
     id: 69,
     slug: 'brokoli_haslanmis',
     name: 'Brokoli (Haşlanmış)',
     category: 'Sebze',
-    calories: 63,
-    protein: 3.6,
-    carbs: 10.8,
-    fat: 0.6,
+    calories: 52.5,
+    protein: 3.57,
+    carbs: 10.77,
+    fat: 0.615,
+    fiber_100g: 3.3,
+    sugar_100g: 1.39,
+    sodium_mg_100g: 41,
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Düşük GI',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Porsiyon',
+        grams: 150,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak (doğranmış)',
+        grams: 156,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
-      source_food_id: '2339',
-      review_status: 'macro_verified_usda',
-      notes: 'Makrolar USDA ile güncellendi (2026-07-14). Bitkisel gıda; USDA lif/şeker 0 eksik veri olabilir, bekletildi.',
-    }
+      source_food_id: '169967',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_160). FDC 169967. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 35,
+      protein: 2.38,
+      carbs: 7.18,
+      fat: 0.41,
+      fiber: 3.3,
+      sugar: 1.39,
+      sodium_mg: 41,
+    },
   },
-
   {
     id: 70,
     slug: 'karnabahar_haslanmis',
     name: 'Karnabahar (Haşlanmış)',
     category: 'Sebze',
-    calories: 42,
-    protein: 2.7,
-    carbs: 6.1,
-    fat: 0.8,
+    calories: 34.5,
+    protein: 2.7600000000000002,
+    carbs: 6.165000000000001,
+    fat: 0.675,
+    fiber_100g: 2.3,
+    sugar_100g: 2.08,
+    sodium_mg_100g: 15,
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI', 'Keto'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+      'Keto',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Porsiyon',
+        grams: 150,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak (yaklaşık 2,5 Cm Parçalar)',
+        grams: 124,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'pending_verification',
-      notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170397',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_161). FDC 170397. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 23,
+      protein: 1.84,
+      carbs: 4.11,
+      fat: 0.45,
+      fiber: 2.3,
+      sugar: 2.08,
+      sodium_mg: 15,
     },
   },
-
   {
     id: 71,
     slug: 'kabak_havuc',
@@ -1648,7 +2574,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1657,7 +2591,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Eski ad "Kabak (Havuç)" belirsizdi; kabak olarak düzeltildi, makrolar kaynakla doğrulanmalı. DÜZELTME ÖNCELİĞİ YÜKSEK Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 72,
     slug: 'patlican_izgara',
@@ -1670,7 +2603,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 180,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1679,7 +2620,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 73,
     slug: 'biber_dolmalik',
@@ -1692,7 +2632,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1701,29 +2649,66 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 74,
     slug: 'roka',
     name: 'Roka',
     category: 'Sebze',
-    calories: 26,
-    protein: 2.1,
-    carbs: 3,
-    fat: 0.6,
+    calories: 20,
+    protein: 2.064,
+    carbs: 2.92,
+    fat: 0.528,
+    fiber_100g: 1.6,
+    sugar_100g: 2.05,
+    sodium_mg_100g: 27,
     serving_size: '1 Kase',
     serving_grams: 80,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 80,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak',
+        grams: 20,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'pending_verification',
-      notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169387',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_156). FDC 169387. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 25,
+      protein: 2.58,
+      carbs: 3.65,
+      fat: 0.66,
+      fiber: 1.6,
+      sugar: 2.05,
+      sodium_mg: 27,
     },
   },
-
   {
     id: 75,
     slug: 'mantar_beyaz',
@@ -1736,16 +2721,23 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Düşük GI'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Düşük GI',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '588',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). USDA lif 0 eksik veri olabilir, bekletildi.',
-    }
+    },
   },
-
   {
     id: 76,
     slug: 'patates_haslanmis',
@@ -1758,7 +2750,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1767,7 +2766,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 77,
     slug: 'misir_haslanmis',
@@ -1780,7 +2778,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1789,7 +2795,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 78,
     slug: 'bezelye_haslanmis',
@@ -1802,7 +2807,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1811,7 +2825,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 79,
     slug: 'dana_biftek_izgara',
@@ -1824,7 +2837,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1833,7 +2853,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 80,
     slug: 'kuzu_pirzola_izgara',
@@ -1846,7 +2865,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1855,7 +2881,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 81,
     slug: 'dana_kiyma_15_yag',
@@ -1868,7 +2893,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1877,7 +2909,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 82,
     slug: 'hindi_gogsu_izgara',
@@ -1890,7 +2921,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1899,7 +2937,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 83,
     slug: 'tavuk_kanat_firin',
@@ -1912,7 +2949,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1921,7 +2964,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 84,
     slug: 'ton_baligi_konserve_suda',
@@ -1934,7 +2976,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein', 'Keto', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+      'Keto',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1943,7 +2992,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 85,
     slug: 'levrek_izgara',
@@ -1956,7 +3004,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein', 'Keto', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+      'Keto',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1965,7 +3020,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 86,
     slug: 'cupra_izgara',
@@ -1978,7 +3032,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -1987,7 +3047,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 87,
     slug: 'hamsi_kizartma',
@@ -2000,7 +3059,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2009,7 +3074,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 88,
     slug: 'karides_haslanmis',
@@ -2022,7 +3086,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein', 'Keto', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+      'Keto',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2031,7 +3102,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 89,
     slug: 'adana_kebap',
@@ -2044,7 +3114,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2053,7 +3129,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 90,
     slug: 'sis_kebap_kuzu',
@@ -2066,7 +3141,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2075,7 +3156,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 91,
     slug: 'pastirma',
@@ -2088,7 +3168,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 15,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2097,7 +3184,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 92,
     slug: 'sucuk',
@@ -2110,7 +3196,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2119,7 +3212,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 93,
     slug: 'kasar_peyniri',
@@ -2132,7 +3224,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 25,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2141,7 +3240,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 94,
     slug: 'labne',
@@ -2154,7 +3252,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2163,7 +3267,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 95,
     slug: 'kefir',
@@ -2176,7 +3279,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Bardak',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2185,7 +3294,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 96,
     slug: 'suzme_yogurt',
@@ -2198,7 +3306,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Akdeniz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2207,7 +3322,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 97,
     slug: 'tereyagi',
@@ -2220,7 +3334,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 10,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2229,7 +3349,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 98,
     slug: 'krema_35',
@@ -2242,7 +3361,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 15,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2251,7 +3376,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 99,
     slug: 'beyaz_ekmek',
@@ -2264,16 +3388,21 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '532',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Ekmek; USDA lif/şeker/sodyum 0 eksik veri olabilir, bekletildi.',
-    }
+    },
   },
-
   {
     id: 100,
     slug: 'bazlama',
@@ -2286,7 +3415,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2295,7 +3430,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 101,
     slug: 'lavas',
@@ -2308,7 +3442,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 60,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2317,7 +3457,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 102,
     slug: 'nohutlu_pilav',
@@ -2330,7 +3469,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2339,7 +3486,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 103,
     slug: 'misir_gevregi',
@@ -2352,7 +3498,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 40,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2361,7 +3513,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 104,
     slug: 'granola',
@@ -2374,7 +3525,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2383,7 +3539,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 105,
     slug: 'ceviz',
@@ -2396,7 +3551,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 4,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2405,7 +3568,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 106,
     slug: 'findik',
@@ -2418,7 +3580,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 2,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2427,7 +3597,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 107,
     slug: 'fistik',
@@ -2440,7 +3609,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 5,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2449,7 +3626,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 108,
     slug: 'ay_cekirdegi_cekilmis',
@@ -2462,7 +3638,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2471,29 +3655,64 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 109,
     slug: 'chia_tohumu',
     name: 'Chia Tohumu',
     category: 'Kuruyemiş',
-    calories: 61,
-    protein: 2,
-    carbs: 5,
-    fat: 3.7,
+    calories: 62.058479999999996,
+    protein: 2.04156,
+    carbs: 4.59276,
+    fat: 3.9468,
+    sodium_mg_100g: 0,
     serving_size: '1 Porsiyon',
     serving_grams: 12,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Porsiyon',
+        grams: 12,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'pending_verification',
-      notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2710819',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_307). FDC 2710819. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 517.154,
+      protein: 17.013,
+      carbs: 38.273,
+      fat: 32.89,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 0,
     },
   },
-
   {
     id: 110,
     slug: 'zeytinyagli_fasulye',
@@ -2506,7 +3725,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Tabak',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2515,7 +3743,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 111,
     slug: 'i_mam_bayildi',
@@ -2528,7 +3755,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2537,7 +3772,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 112,
     slug: 'yaprak_sarma',
@@ -2550,7 +3784,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 35,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2559,7 +3801,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 113,
     slug: 'dolma_biber',
@@ -2572,7 +3813,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2581,7 +3828,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 114,
     slug: 'hunkar_begendi',
@@ -2594,7 +3840,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2603,7 +3855,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 115,
     slug: 'etli_nohut',
@@ -2616,7 +3867,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Yüksek Lif'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2625,7 +3883,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 116,
     slug: 'ezogelin_corbasi',
@@ -2638,7 +3895,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2647,7 +3910,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 117,
     slug: 'tarhana_corbasi',
@@ -2660,7 +3922,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2669,7 +3936,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 118,
     slug: 'i_skembe_corbasi',
@@ -2682,7 +3948,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2691,7 +3963,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 119,
     slug: 'pilav_ustu_doner_tavuk',
@@ -2704,7 +3975,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 350,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2713,7 +3990,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 120,
     slug: 'kokorec',
@@ -2726,7 +4002,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2735,7 +4017,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 121,
     slug: 'midye_dolma',
@@ -2748,7 +4029,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2757,7 +4043,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 122,
     slug: 'mercimek_koftesi',
@@ -2770,7 +4055,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2779,7 +4072,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 123,
     slug: 'pide_kiymali',
@@ -2792,7 +4084,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2801,7 +4097,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 124,
     slug: 'humus',
@@ -2814,7 +4109,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2823,7 +4127,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 125,
     slug: 'revani',
@@ -2836,7 +4139,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2845,7 +4152,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 126,
     slug: 'sutlac',
@@ -2858,7 +4164,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2867,7 +4178,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 127,
     slug: 'asure',
@@ -2880,7 +4190,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2889,7 +4207,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 128,
     slug: 'helva_tahin',
@@ -2902,7 +4219,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2911,7 +4234,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 129,
     slug: 'lokum',
@@ -2924,7 +4246,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 12,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2933,7 +4262,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 130,
     slug: 'zeytin_siyah',
@@ -2946,16 +4274,24 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 35,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Keto'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Keto',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '4854',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). Salamura zeytin; USDA sodyum 0 şüpheli, tüm mikro bekletildi.',
-    }
+    },
   },
-
   {
     id: 131,
     slug: 'zeytin_yesil',
@@ -2968,7 +4304,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 35,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Keto'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2977,7 +4322,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 132,
     slug: 'bal',
@@ -2990,7 +4334,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 21,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -2999,7 +4350,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 133,
     slug: 'recel_kayisi',
@@ -3012,7 +4362,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 20,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3021,7 +4378,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 134,
     slug: 'protein_bar',
@@ -3034,7 +4390,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 60,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3043,7 +4404,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 135,
     slug: 'sosis_dana',
@@ -3056,7 +4416,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 80,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3065,7 +4430,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 136,
     slug: 'tavuk_sis',
@@ -3078,7 +4442,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3087,7 +4458,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 137,
     slug: 'firin_tavuk_but',
@@ -3100,7 +4470,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3109,7 +4485,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 138,
     slug: 'kisir',
@@ -3122,7 +4497,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3131,7 +4515,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 139,
     slug: 'pilav_tereyagli',
@@ -3144,7 +4527,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3153,7 +4542,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 140,
     slug: 'soya_sutu',
@@ -3166,7 +4554,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Bardak',
     serving_grams: 240,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3175,7 +4570,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 141,
     slug: 'seftali',
@@ -3188,7 +4582,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3197,29 +4598,65 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 142,
     slug: 'ayva',
     name: 'Ayva',
     category: 'Meyve',
-    calories: 57,
-    protein: 0.4,
-    carbs: 15,
+    calories: 114,
+    protein: 0.8,
+    carbs: 30.6,
     fat: 0.2,
+    fiber_100g: 1.9,
+    sodium_mg_100g: 4,
     serving_size: '1 Adet',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 200,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Adet Ayva (yenilebilir kısım)',
+        grams: 92,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168163',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_126). FDC 168163. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 57,
+      protein: 0.4,
+      carbs: 15.3,
+      fat: 0.1,
+      fiber: 1.9,
+      sugar: null,
+      sodium_mg: 4,
     },
   },
-
   {
     id: 143,
     slug: 'limon',
@@ -3232,7 +4669,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 60,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3241,7 +4685,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Limon makroları ve USDA eşleşmesi kaynakla doğrulanmalı. DÜZELTME ÖNCELİĞİ YÜKSEK Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 144,
     slug: 'visne',
@@ -3254,7 +4697,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3263,95 +4713,245 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 145,
     slug: 'bogurtlen',
     name: 'Böğürtlen',
     category: 'Meyve',
     calories: 43,
-    protein: 1.4,
-    carbs: 10,
-    fat: 0.5,
+    protein: 1.39,
+    carbs: 9.61,
+    fat: 0.49,
+    fiber_100g: 5.3,
+    sugar_100g: 4.88,
+    sodium_mg_100g: 1,
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 100,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak',
+        grams: 144,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '173946',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_113). FDC 173946. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 43,
+      protein: 1.39,
+      carbs: 9.61,
+      fat: 0.49,
+      fiber: 5.3,
+      sugar: 4.88,
+      sodium_mg: 1,
     },
   },
-
   {
     id: 146,
     slug: 'ahududu',
     name: 'Ahududu',
     category: 'Meyve',
-    calories: 52,
-    protein: 1.2,
-    carbs: 12,
-    fat: 0.7,
+    calories: 57.3375,
+    protein: 1.008125,
+    carbs: 12.904375,
+    fat: 0.1875,
+    sugar_100g: 2.6759,
+    sodium_mg_100g: 0,
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 100,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2263888',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_112). FDC 2263888. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 57.3375,
+      protein: 1.008125,
+      carbs: 12.904375,
+      fat: 0.1875,
+      fiber: null,
+      sugar: 2.6759,
+      sodium_mg: 0,
     },
   },
-
   {
     id: 147,
     slug: 'dut_taze',
-    name: 'Dut (Taze)',
+    name: 'Dut',
     category: 'Meyve',
     calories: 43,
-    protein: 1.4,
-    carbs: 10,
-    fat: 0.4,
+    protein: 1.44,
+    carbs: 9.8,
+    fat: 0.39,
+    fiber_100g: 1.7,
+    sugar_100g: 8.1,
+    sodium_mg_100g: 10,
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [
+      'Dut (Taze)',
+    ],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 100,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak',
+        grams: 140,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169913',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_127). FDC 169913. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 43,
+      protein: 1.44,
+      carbs: 9.8,
+      fat: 0.39,
+      fiber: 1.7,
+      sugar: 8.1,
+      sodium_mg: 10,
     },
   },
-
   {
     id: 148,
     slug: 'mango',
     name: 'Mango',
     category: 'Meyve',
     calories: 99,
-    protein: 1.4,
-    carbs: 25,
-    fat: 0.6,
+    protein: 1.3529999999999998,
+    carbs: 24.717,
+    fat: 0.627,
+    fiber_100g: 1.6,
+    sugar_100g: 13.66,
+    sodium_mg_100g: 1,
     serving_size: '1 Adet',
     serving_grams: 165,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 165,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Adet Mango (yenilebilir kısım)',
+        grams: 336,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169910',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_122). FDC 169910. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 60,
+      protein: 0.82,
+      carbs: 14.98,
+      fat: 0.38,
+      fiber: 1.6,
+      sugar: 13.66,
+      sodium_mg: 1,
     },
   },
-
   {
     id: 149,
     slug: 'papaya',
@@ -3364,7 +4964,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3373,29 +4980,67 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 150,
     slug: 'kayisi_kuru',
-    name: 'Kayısı (Kuru)',
+    name: 'Kuru Kayısı',
     category: 'Meyve',
-    calories: 48,
-    protein: 0.7,
-    carbs: 12.5,
-    fat: 0.1,
+    calories: 36.15,
+    protein: 0.5085,
+    carbs: 9.395999999999999,
+    fat: 0.0765,
+    fiber_100g: 7.3,
+    sugar_100g: 53.44,
+    sodium_mg_100g: 10,
     serving_size: '1 Adet',
     serving_grams: 15,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [
+      'Kayısı (Kuru)',
+    ],
+    portions: [
+      {
+        label: '1 Adet',
+        grams: 15,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Yarım Kuru Kayısı',
+        grams: 3.5,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '173941',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_129). FDC 173941. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 241,
+      protein: 3.39,
+      carbs: 62.64,
+      fat: 0.51,
+      fiber: 7.3,
+      sugar: 53.44,
+      sodium_mg: 10,
     },
   },
-
   {
     id: 151,
     slug: 'kuru_uzum',
@@ -3408,7 +5053,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 40,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3417,7 +5069,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 152,
     slug: 'sogan_cig',
@@ -3430,7 +5081,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3439,7 +5097,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 153,
     slug: 'sarimsak',
@@ -3452,7 +5109,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Diş',
     serving_grams: 3,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3461,7 +5125,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Sarımsak porsiyon/makro değerleri USDA ile doğrulanmalı. DÜZELTME ÖNCELİĞİ YÜKSEK Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 154,
     slug: 'lahana_beyaz',
@@ -3474,7 +5137,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3483,7 +5154,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 155,
     slug: 'kereviz',
@@ -3496,7 +5166,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3505,7 +5183,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 156,
     slug: 'pirasa',
@@ -3518,7 +5195,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3527,7 +5211,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 157,
     slug: 'enginar',
@@ -3540,7 +5223,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 120,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3549,7 +5240,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 158,
     slug: 'bamya_haslanmis',
@@ -3562,7 +5252,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3571,7 +5269,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 159,
     slug: 'semizotu',
@@ -3584,7 +5281,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3593,7 +5297,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 160,
     slug: 'taze_fasulye',
@@ -3606,7 +5309,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3615,7 +5326,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 161,
     slug: 'barbunya_haslanmis',
@@ -3628,7 +5338,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3637,7 +5356,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 162,
     slug: 'patlican_kizartma',
@@ -3650,7 +5368,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3659,7 +5384,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 163,
     slug: 'biber_cig',
@@ -3672,7 +5396,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3681,7 +5412,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayı reddedilsin; doğru kaynak tekrar aranmalı Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 164,
     slug: 'karnabahar_kizartma',
@@ -3694,7 +5424,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3703,7 +5440,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 165,
     slug: 'patates_kizartmasi',
@@ -3716,7 +5452,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3725,7 +5468,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 166,
     slug: 'kaskaval_peyniri',
@@ -3738,7 +5480,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3747,7 +5495,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 167,
     slug: 'cokelek',
@@ -3760,7 +5507,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3769,7 +5522,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 168,
     slug: 'kaymak',
@@ -3782,7 +5534,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3791,29 +5548,63 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 169,
     slug: 'krem_peynir',
     name: 'Krem Peynir',
     category: 'Süt Ürünleri',
-    calories: 102,
-    protein: 2,
-    carbs: 1.6,
-    fat: 10,
+    calories: 105,
+    protein: 1.845,
+    carbs: 1.656,
+    fat: 10.331999999999999,
+    fiber_100g: 0,
+    sugar_100g: 3.76,
+    sodium_mg_100g: 314,
     serving_size: '1 Porsiyon',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Porsiyon',
+        grams: 30,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Yemek Kaşığı',
+        grams: 14.5,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'pending_verification',
-      notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '173418',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_233). FDC 173418. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 350,
+      protein: 6.15,
+      carbs: 5.52,
+      fat: 34.44,
+      fiber: 0,
+      sugar: 3.76,
+      sodium_mg: 314,
     },
   },
-
   {
     id: 170,
     slug: 'mozzarella',
@@ -3826,7 +5617,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3835,29 +5632,63 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 171,
     slug: 'yarim_yagli_sut',
     name: 'Yarım Yağlı Süt',
     category: 'Süt Ürünleri',
-    calories: 102,
-    protein: 8,
-    carbs: 12,
-    fat: 2.4,
+    calories: 120,
+    protein: 8.04,
+    carbs: 11.784,
+    fat: 4.56,
+    sugar_100g: 4.89,
+    sodium_mg_100g: 39,
     serving_size: '1 Bardak',
     serving_grams: 240,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak',
+        grams: 240,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Bardak (USDA 227g)',
+        grams: 227,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'pending_verification',
-      notes: 'USDA eşleşmesini elle onayla; uygunsa verified yap Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '321359',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_022). FDC 321359. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 50,
+      protein: 3.35,
+      carbs: 4.91,
+      fat: 1.9,
+      fiber: null,
+      sugar: 4.89,
+      sodium_mg: 39,
     },
   },
-
   {
     id: 172,
     slug: 'yogurt_yarim_yagli',
@@ -3870,7 +5701,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3879,7 +5716,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 173,
     slug: 'cig_yumurta',
@@ -3892,38 +5728,83 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'USDA',
       source_name: 'USDA FoodData Central',
       source_food_id: '6041',
       review_status: 'macro_verified_usda',
       notes: 'Makrolar USDA ile güncellendi (2026-07-14). USDA sodyum 0 eksik veri olabilir, bekletildi.',
-    }
+    },
   },
-
   {
     id: 174,
     slug: 'sahanda_yumurta',
-    name: 'Sahanda Yumurta',
+    name: 'Yumurta (Sahanda)',
     category: 'Yumurta',
     calories: 196,
-    protein: 13,
-    carbs: 1,
-    fat: 15,
+    protein: 13.61,
+    carbs: 0.83,
+    fat: 14.84,
+    fiber_100g: 0,
+    sugar_100g: 0.4,
+    sodium_mg_100g: 207,
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
+    search_aliases: [
+      'Sahanda Yumurta',
+    ],
+    portions: [
+      {
+        label: '1 Porsiyon',
+        grams: 100,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '1 Adet (büyük)',
+        grams: 46,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '173423',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_210). FDC 173423. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Exact existing record update.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 196,
+      protein: 13.61,
+      carbs: 0.83,
+      fat: 14.84,
+      fiber: 0,
+      sugar: 0.4,
+      sodium_mg: 207,
     },
   },
-
   {
     id: 175,
     slug: 'sucuklu_yumurta',
@@ -3936,7 +5817,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3945,7 +5832,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 176,
     slug: 'et_sote',
@@ -3958,7 +5844,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3967,7 +5859,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 177,
     slug: 'tas_kebabi',
@@ -3980,7 +5871,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -3989,7 +5886,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 178,
     slug: 'musakka',
@@ -4002,7 +5898,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4011,7 +5912,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 179,
     slug: 'etli_guvec',
@@ -4024,7 +5924,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4033,7 +5939,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 180,
     slug: 'kofte_ev_yapimi',
@@ -4046,7 +5951,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4055,7 +5966,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 181,
     slug: 'ciger_kizartma',
@@ -4068,7 +5978,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4077,7 +5993,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 182,
     slug: 'salam',
@@ -4090,7 +6005,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4099,7 +6019,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 183,
     slug: 'jambon',
@@ -4112,7 +6031,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Dilim',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4121,7 +6046,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 184,
     slug: 'eriste_haslanmis',
@@ -4134,7 +6058,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4143,7 +6072,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 185,
     slug: 'sehirye_haslanmis',
@@ -4156,7 +6084,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4165,7 +6099,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 186,
     slug: 'spagetti_domates_soslu',
@@ -4178,7 +6111,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4187,7 +6126,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 187,
     slug: 'bulgur_koftesi',
@@ -4200,7 +6138,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4209,7 +6154,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 188,
     slug: 'kirmizi_mercimek_haslanmis',
@@ -4222,7 +6166,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4231,7 +6184,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 189,
     slug: 'yesil_mercimek_haslanmis',
@@ -4244,7 +6196,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4253,7 +6214,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 190,
     slug: 'barbunya_pilaki',
@@ -4266,7 +6226,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4275,7 +6244,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 191,
     slug: 'nohut_yemegi',
@@ -4288,7 +6256,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4297,7 +6274,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 192,
     slug: 'bamya_yemegi',
@@ -4310,7 +6286,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4319,7 +6304,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 193,
     slug: 'mucver',
@@ -4332,7 +6316,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4341,7 +6330,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 194,
     slug: 'patates_salatasi',
@@ -4354,7 +6342,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4363,7 +6358,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 195,
     slug: 'coban_salata',
@@ -4376,7 +6370,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4385,7 +6388,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 196,
     slug: 'piyaz',
@@ -4398,7 +6400,17 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4407,7 +6419,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 197,
     slug: 'falafel',
@@ -4420,7 +6431,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 20,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4429,7 +6446,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 198,
     slug: 'lahana_sarmasi',
@@ -4442,7 +6458,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4451,7 +6472,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 199,
     slug: 'ispanak_yemegi',
@@ -4464,7 +6484,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4473,7 +6502,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 200,
     slug: 'firin_makarna',
@@ -4486,7 +6514,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4495,7 +6527,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 201,
     slug: 'balik_tava',
@@ -4508,7 +6539,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4517,7 +6553,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 202,
     slug: 'midye_tava',
@@ -4530,7 +6565,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4539,7 +6578,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 203,
     slug: 'kumpir',
@@ -4552,7 +6590,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 350,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4561,7 +6604,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 204,
     slug: 'durum_tavuk',
@@ -4574,7 +6616,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4583,7 +6630,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 205,
     slug: 'yayla_corbasi',
@@ -4596,7 +6642,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4605,7 +6655,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 206,
     slug: 'sehirye_corbasi',
@@ -4618,7 +6667,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4627,7 +6680,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 207,
     slug: 'dugun_corbasi',
@@ -4640,7 +6692,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4649,7 +6706,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 208,
     slug: 'brokoli_corbasi',
@@ -4662,7 +6718,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4671,7 +6733,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 209,
     slug: 'yuksuk_corbasi',
@@ -4684,7 +6745,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4693,7 +6758,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 210,
     slug: 'tahin_pekmez',
@@ -4706,7 +6770,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 40,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4715,7 +6785,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 211,
     slug: 'krep',
@@ -4728,7 +6797,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 80,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4737,7 +6810,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 212,
     slug: 'waffle',
@@ -4750,7 +6822,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4759,7 +6835,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 213,
     slug: 'pogaca_zeytinli',
@@ -4772,7 +6847,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 80,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4781,7 +6861,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 214,
     slug: 'aycicek_yagi',
@@ -4794,7 +6873,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Yemek Kaşığı',
     serving_grams: 10,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4803,7 +6890,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 215,
     slug: 'antep_fistigi',
@@ -4816,7 +6902,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 2,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4825,29 +6919,67 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 216,
     slug: 'kaju',
-    name: 'Kaju',
+    name: 'Kaju (Çiğ)',
     category: 'Kuruyemiş',
-    calories: 157,
-    protein: 5,
-    carbs: 9,
-    fat: 12,
+    calories: 169.39919999999998,
+    protein: 5.23269,
+    carbs: 10.88661,
+    fat: 11.658,
+    fiber_100g: 4.104,
+    sodium_mg_100g: 4.759,
     serving_size: '1 Kase',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
+    search_aliases: [
+      'Kaju',
+    ],
+    portions: [
+      {
+        label: '1 Kase',
+        grams: 30,
+        is_default: true,
+        source: 'local_catalog',
+      },
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: false,
+        source: 'source_verified_usda',
+      },
+    ],
     review: {
-      source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
-      source_name: 'foodDatabase.js',
-      source_food_id: null,
-      review_status: 'needs_review',
-      notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2515374',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'local_existing_portion + source_verified_usda',
+      notes: 'USDA dry-run preview (wl_303). FDC 2515374. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 564.664,
+      protein: 17.4423,
+      carbs: 36.2887,
+      fat: 38.86,
+      fiber: 4.104,
+      sugar: null,
+      sodium_mg: 4.759,
     },
   },
-
   {
     id: 217,
     slug: 'leblebi',
@@ -4860,7 +6992,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4869,7 +7009,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 218,
     slug: 'karisik_kuruyemis',
@@ -4882,7 +7021,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz', 'Keto', 'Yüksek Protein'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+      'Keto',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4891,7 +7038,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 219,
     slug: 'biskuvi_petibor',
@@ -4904,7 +7050,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 10,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4913,7 +7063,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 220,
     slug: 'cikolata_sutlu',
@@ -4926,7 +7075,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4935,7 +7088,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 221,
     slug: 'gofret',
@@ -4948,7 +7100,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4957,7 +7113,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 222,
     slug: 'cips_patates',
@@ -4970,7 +7125,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -4979,7 +7141,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 223,
     slug: 'kraker',
@@ -4992,7 +7153,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5001,7 +7166,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 224,
     slug: 'popcorn',
@@ -5014,7 +7178,15 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 30,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5023,7 +7195,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 225,
     slug: 'granola_bar',
@@ -5036,7 +7207,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 40,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5045,7 +7221,6 @@ export const MASTER_FOOD_DB = [
       notes: 'USDA adayını elle kontrol et; pişmiş/çiğ farkını netleştir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 226,
     slug: 'irmik_helvasi',
@@ -5058,7 +7233,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 100,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5067,7 +7246,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 227,
     slug: 'lokma',
@@ -5080,7 +7258,11 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 25,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5089,7 +7271,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 228,
     slug: 'tursu_karisik',
@@ -5102,7 +7283,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 50,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5111,7 +7299,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 229,
     slug: 'peynirli_tost',
@@ -5124,7 +7311,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Vejetaryen',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5133,7 +7325,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 230,
     slug: 'sucuklu_pide',
@@ -5146,7 +7337,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Adet',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5155,7 +7351,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 231,
     slug: 'tavuklu_salata',
@@ -5168,7 +7363,14 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5177,7 +7379,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 232,
     slug: 'ton_salata',
@@ -5190,7 +7391,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein', 'Akdeniz'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5199,7 +7406,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 233,
     slug: 'mercimek_salatasi',
@@ -5212,7 +7418,17 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Kase',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Lif', 'Yüksek Protein', 'Akdeniz'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Lif',
+      'Yüksek Protein',
+      'Akdeniz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5221,7 +7437,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 234,
     slug: 'zeytinyagli_enginar',
@@ -5234,7 +7449,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5243,7 +7467,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 235,
     slug: 'fasulye_pilaki',
@@ -5256,7 +7479,16 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Akdeniz', 'Yüksek Lif'],
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Akdeniz',
+      'Yüksek Lif',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5265,7 +7497,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 236,
     slug: 'karniyarik_kiyma',
@@ -5278,7 +7509,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5287,7 +7524,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 237,
     slug: 'tavuk_sote',
@@ -5300,7 +7536,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 200,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Yüksek Protein'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Yüksek Protein',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5309,7 +7551,6 @@ export const MASTER_FOOD_DB = [
       notes: 'TÜRKOMP/tarif hesabı gerekir Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 238,
     slug: 'balik_izgara',
@@ -5322,7 +7563,13 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Porsiyon',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Yüksek Protein', 'Keto'],
+    tags: [
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Yüksek Protein',
+      'Keto',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5331,7 +7578,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kaynak bulunana kadar pending kalsın Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 239,
     slug: 'muzlu_sut',
@@ -5344,7 +7590,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Bardak',
     serving_grams: 250,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5353,7 +7604,6 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
-
   {
     id: 240,
     slug: 'cay_sutlu',
@@ -5366,7 +7616,12 @@ export const MASTER_FOOD_DB = [
     serving_size: '1 Fincan',
     serving_grams: 150,
     data_source: 'MASTER_DB',
-    tags: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz'],
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
     review: {
       source_type: 'LOCAL_MASTER_PENDING_VERIFICATION',
       source_name: 'foodDatabase.js',
@@ -5375,8 +7630,1864 @@ export const MASTER_FOOD_DB = [
       notes: 'Kategori düzelt + değer kontrol Kategori düzeltildi; besin değerleri değişmedi. Lif/şeker/sodyum placeholder sıfır; gerçek değerler eklenmeli.',
     },
   },
+  {
+    id: 241,
+    slug: 'espresso',
+    name: 'Espresso',
+    category: 'İçecek',
+    calories: 9,
+    protein: 0.12,
+    carbs: 1.67,
+    fat: 0.18,
+    fiber_100g: 0,
+    sugar_100g: 0,
+    sodium_mg_100g: 14,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '171891',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_012). FDC 171891. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 9,
+      protein: 0.12,
+      carbs: 1.67,
+      fat: 0.18,
+      fiber: 0,
+      sugar: 0,
+      sodium_mg: 14,
+    },
+  },
+  {
+    id: 242,
+    slug: 'yagsiz_sut',
+    name: 'Yağsız Süt',
+    category: 'Süt Ürünleri',
+    calories: 77.86,
+    protein: 7.8547,
+    carbs: 11.1981,
+    fat: 0.1832,
+    sugar_100g: 5.05,
+    sodium_mg_100g: 41,
+    serving_size: '1 Bardak',
+    serving_grams: 229,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Vejetaryen',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak',
+        grams: 229,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '322559',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_023). FDC 322559. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 34,
+      protein: 3.43,
+      carbs: 4.89,
+      fat: 0.08,
+      fiber: null,
+      sugar: 5.05,
+      sodium_mg: 41,
+    },
+  },
+  {
+    id: 243,
+    slug: 'portakal_suyu',
+    name: 'Portakal Suyu',
+    category: 'İçecek',
+    calories: 111.6,
+    protein: 1.736,
+    carbs: 25.792,
+    fat: 0.496,
+    fiber_100g: 0.2,
+    sugar_100g: 8.4,
+    sodium_mg_100g: 1,
+    serving_size: '1 Bardak',
+    serving_grams: 248,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak',
+        grams: 248,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169098',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_031). FDC 169098. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 45,
+      protein: 0.7,
+      carbs: 10.4,
+      fat: 0.2,
+      fiber: 0.2,
+      sugar: 8.4,
+      sodium_mg: 1,
+    },
+  },
+  {
+    id: 244,
+    slug: 'limon_suyu_sikma',
+    name: 'Limon Suyu (Sıkma)',
+    category: 'İçecek',
+    calories: 10.559999999999999,
+    protein: 0.16799999999999998,
+    carbs: 3.312,
+    fat: 0.1152,
+    fiber_100g: 0.3,
+    sugar_100g: 2.52,
+    sodium_mg_100g: 1,
+    serving_size: '1 Limondan Elde Edilen Meyve Suyu',
+    serving_grams: 48,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Limondan Elde Edilen Meyve Suyu',
+        grams: 48,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '167747',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_078). FDC 167747. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 22,
+      protein: 0.35,
+      carbs: 6.9,
+      fat: 0.24,
+      fiber: 0.3,
+      sugar: 2.52,
+      sodium_mg: 1,
+    },
+  },
+  {
+    id: 245,
+    slug: 'yaban_mersini',
+    name: 'Yaban Mersini',
+    category: 'Meyve',
+    calories: 63.8563,
+    protein: 0.703125,
+    carbs: 14.571775,
+    fat: 0.3063,
+    sugar_100g: 9.356,
+    sodium_mg_100g: 0,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2263889',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_111). FDC 2263889. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 63.8563,
+      protein: 0.703125,
+      carbs: 14.571775,
+      fat: 0.3063,
+      fiber: null,
+      sugar: 9.356,
+      sodium_mg: 0,
+    },
+  },
+  {
+    id: 246,
+    slug: 'misket_limonu',
+    name: 'Misket Limonu',
+    category: 'Meyve',
+    calories: 20.1,
+    protein: 0.469,
+    carbs: 7.0618,
+    fat: 0.134,
+    fiber_100g: 2.8,
+    sugar_100g: 1.69,
+    sodium_mg_100g: 2,
+    serving_size: '1 Adet Misket Limonu (yaklaşık 5,1 Cm Çap)',
+    serving_grams: 67,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet Misket Limonu (yaklaşık 5,1 Cm Çap)',
+        grams: 67,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168155',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_114). FDC 168155. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 30,
+      protein: 0.7,
+      carbs: 10.54,
+      fat: 0.2,
+      fiber: 2.8,
+      sugar: 1.69,
+      sodium_mg: 2,
+    },
+  },
+  {
+    id: 247,
+    slug: 'trabzon_hurmasi',
+    name: 'Trabzon Hurması',
+    category: 'Meyve',
+    calories: 117.6,
+    protein: 0.9743999999999999,
+    carbs: 31.231199999999998,
+    fat: 0.3192,
+    fiber_100g: 3.6,
+    sugar_100g: 12.53,
+    sodium_mg_100g: 1,
+    serving_size: '1 Adet Trabzon Hurması (yaklaşık 6,4 Cm Çap)',
+    serving_grams: 168,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet Trabzon Hurması (yaklaşık 6,4 Cm Çap)',
+        grams: 168,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169941',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_115). FDC 169941. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 70,
+      protein: 0.58,
+      carbs: 18.59,
+      fat: 0.19,
+      fiber: 3.6,
+      sugar: 12.53,
+      sodium_mg: 1,
+    },
+  },
+  {
+    id: 248,
+    slug: 'carkifelek',
+    name: 'Çarkıfelek',
+    category: 'Meyve',
+    calories: 228.92,
+    protein: 5.192,
+    carbs: 55.17679999999999,
+    fat: 1.652,
+    fiber_100g: 10.4,
+    sugar_100g: 11.2,
+    sodium_mg_100g: 28,
+    serving_size: '1 Bardak',
+    serving_grams: 236,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak',
+        grams: 236,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169108',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_116). FDC 169108. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 97,
+      protein: 2.2,
+      carbs: 23.38,
+      fat: 0.7,
+      fiber: 10.4,
+      sugar: 11.2,
+      sodium_mg: 28,
+    },
+  },
+  {
+    id: 249,
+    slug: 'kuru_incir',
+    name: 'Kuru İncir',
+    category: 'Meyve',
+    calories: 20.916,
+    protein: 0.2772,
+    carbs: 5.3676,
+    fat: 0.07728,
+    fiber_100g: 9.8,
+    sugar_100g: 47.9,
+    sodium_mg_100g: 10,
+    serving_size: '1 Adet Kuru İncir',
+    serving_grams: 8.4,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet Kuru İncir',
+        grams: 8.4,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '326905',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_117). FDC 326905. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 249,
+      protein: 3.3,
+      carbs: 63.9,
+      fat: 0.92,
+      fiber: 9.8,
+      sugar: 47.9,
+      sodium_mg: 10,
+    },
+  },
+  {
+    id: 250,
+    slug: 'kuru_erik',
+    name: 'Kuru Erik',
+    category: 'Meyve',
+    calories: 22.8,
+    protein: 0.2071,
+    carbs: 6.0686,
+    fat: 0.0361,
+    fiber_100g: 7.1,
+    sugar_100g: 38.13,
+    sodium_mg_100g: 2,
+    serving_size: '1 Adet Kuru Erik (çekirdeksiz)',
+    serving_grams: 9.5,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet Kuru Erik (çekirdeksiz)',
+        grams: 9.5,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168162',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_118). FDC 168162. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 240,
+      protein: 2.18,
+      carbs: 63.88,
+      fat: 0.38,
+      fiber: 7.1,
+      sugar: 38.13,
+      sodium_mg: 2,
+    },
+  },
+  {
+    id: 251,
+    slug: 'turp',
+    name: 'Turp',
+    category: 'Sebze',
+    calories: 18.56,
+    protein: 0.7888000000000001,
+    carbs: 3.9439999999999995,
+    fat: 0.11599999999999999,
+    fiber_100g: 1.6,
+    sugar_100g: 1.86,
+    sodium_mg_100g: 39,
+    serving_size: '1 Bardak (dilimlenmiş)',
+    serving_grams: 116,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak (dilimlenmiş)',
+        grams: 116,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169276',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_146). FDC 169276. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 16,
+      protein: 0.68,
+      carbs: 3.4,
+      fat: 0.1,
+      fiber: 1.6,
+      sugar: 1.86,
+      sodium_mg: 39,
+    },
+  },
+  {
+    id: 252,
+    slug: 'bruksel_lahanasi_haslanmis',
+    name: 'Brüksel Lahanası (Haşlanmış)',
+    category: 'Sebze',
+    calories: 56.160000000000004,
+    protein: 3.9779999999999998,
+    carbs: 11.076,
+    fat: 0.78,
+    fiber_100g: 2.6,
+    sugar_100g: 1.74,
+    sodium_mg_100g: 21,
+    serving_size: '1 Bardak',
+    serving_grams: 156,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak',
+        grams: 156,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169971',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_147). FDC 169971. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 36,
+      protein: 2.55,
+      carbs: 7.1,
+      fat: 0.5,
+      fiber: 2.6,
+      sugar: 1.74,
+      sodium_mg: 21,
+    },
+  },
+  {
+    id: 253,
+    slug: 'maydanoz_taze',
+    name: 'Maydanoz (Taze)',
+    category: 'Sebze',
+    calories: 1.3679999999999999,
+    protein: 0.11286,
+    carbs: 0.24054,
+    fat: 0.03002,
+    fiber_100g: 3.3,
+    sugar_100g: 0.85,
+    sodium_mg_100g: 56,
+    serving_size: '1 Yemek Kaşığı',
+    serving_grams: 3.8,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Yemek Kaşığı',
+        grams: 3.8,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170416',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_150). FDC 170416. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 36,
+      protein: 2.97,
+      carbs: 6.33,
+      fat: 0.79,
+      fiber: 3.3,
+      sugar: 0.85,
+      sodium_mg: 56,
+    },
+  },
+  {
+    id: 254,
+    slug: 'dereotu_taze',
+    name: 'Dereotu (Taze)',
+    category: 'Sebze',
+    calories: 0.08600000000000001,
+    protein: 0.00692,
+    carbs: 0.014039999999999999,
+    fat: 0.0022400000000000002,
+    fiber_100g: 2.1,
+    sodium_mg_100g: 61,
+    serving_size: '1 Dal Dereotu',
+    serving_grams: 0.2,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Dal Dereotu',
+        grams: 0.2,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '172233',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_151). FDC 172233. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 43,
+      protein: 3.46,
+      carbs: 7.02,
+      fat: 1.12,
+      fiber: 2.1,
+      sugar: null,
+      sodium_mg: 61,
+    },
+  },
+  {
+    id: 255,
+    slug: 'kirmizi_lahana_cig',
+    name: 'Kırmızı Lahana (Çiğ)',
+    category: 'Sebze',
+    calories: 34.0538,
+    protein: 1.2425,
+    carbs: 6.7899,
+    fat: 0.2138,
+    sodium_mg_100g: 11.72,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2346408',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_152). FDC 2346408. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 34.0538,
+      protein: 1.2425,
+      carbs: 6.7899,
+      fat: 0.2138,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 11.72,
+    },
+  },
+  {
+    id: 256,
+    slug: 'patates_cig',
+    name: 'Patates (Çiğ)',
+    category: 'Sebze',
+    calories: 115.5,
+    protein: 3.0749999999999997,
+    carbs: 26.235,
+    fat: 0.135,
+    fiber_100g: 2.1,
+    sugar_100g: 0.82,
+    sodium_mg_100g: 6,
+    serving_size: '1 Bardak (küp doğranmış)',
+    serving_grams: 150,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak (küp doğranmış)',
+        grams: 150,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170026',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_153). FDC 170026. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 77,
+      protein: 2.05,
+      carbs: 17.49,
+      fat: 0.09,
+      fiber: 2.1,
+      sugar: 0.82,
+      sodium_mg: 6,
+    },
+  },
+  {
+    id: 257,
+    slug: 'marul_iceberg',
+    name: 'Marul (Iceberg)',
+    category: 'Sebze',
+    calories: 17.10875,
+    protein: 0.7425,
+    carbs: 3.36875,
+    fat: 0.07375,
+    sodium_mg_100g: 16.11,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2346388',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_157). FDC 2346388. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 17.10875,
+      protein: 0.7425,
+      carbs: 3.36875,
+      fat: 0.07375,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 16.11,
+    },
+  },
+  {
+    id: 258,
+    slug: 'ispanak_haslanmis',
+    name: 'Ispanak (Haşlanmış)',
+    category: 'Sebze',
+    calories: 41.4,
+    protein: 5.346,
+    carbs: 6.75,
+    fat: 0.468,
+    fiber_100g: 2.4,
+    sugar_100g: 0.43,
+    sodium_mg_100g: 70,
+    serving_size: '1 Bardak',
+    serving_grams: 180,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak',
+        grams: 180,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168463',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_159). FDC 168463. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 23,
+      protein: 2.97,
+      carbs: 3.75,
+      fat: 0.26,
+      fiber: 2.4,
+      sugar: 0.43,
+      sodium_mg: 70,
+    },
+  },
+  {
+    id: 259,
+    slug: 'biber_kirmizi_cig',
+    name: 'Biber (Kırmızı Çiğ)',
+    category: 'Sebze',
+    calories: 31.3256,
+    protein: 0.895625,
+    carbs: 6.653175,
+    fat: 0.1256,
+    fiber_100g: 1.158,
+    sodium_mg_100g: 0,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2258590',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_166). FDC 2258590. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 31.3256,
+      protein: 0.895625,
+      carbs: 6.653175,
+      fat: 0.1256,
+      fiber: 1.158,
+      sugar: null,
+      sodium_mg: 0,
+    },
+  },
+  {
+    id: 260,
+    slug: 'biber_yesil_cig',
+    name: 'Biber (Yeşil Çiğ)',
+    category: 'Sebze',
+    calories: 22.9291,
+    protein: 0.715,
+    carbs: 4.7781,
+    fat: 0.1063,
+    fiber_100g: 0.9419,
+    sodium_mg_100g: 0,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2258588',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_167). FDC 2258588. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 22.9291,
+      protein: 0.715,
+      carbs: 4.7781,
+      fat: 0.1063,
+      fiber: 0.9419,
+      sugar: null,
+      sodium_mg: 0,
+    },
+  },
+  {
+    id: 261,
+    slug: 'havuc_haslanmis',
+    name: 'Havuç (Haşlanmış)',
+    category: 'Sebze',
+    calories: 54.6,
+    protein: 1.1856,
+    carbs: 12.823200000000002,
+    fat: 0.2808,
+    fiber_100g: 3,
+    sugar_100g: 3.45,
+    sodium_mg_100g: 58,
+    serving_size: '1 Bardak (dilimlenmiş)',
+    serving_grams: 156,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak (dilimlenmiş)',
+        grams: 156,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170394',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_171). FDC 170394. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 35,
+      protein: 0.76,
+      carbs: 8.22,
+      fat: 0.18,
+      fiber: 3,
+      sugar: 3.45,
+      sodium_mg: 58,
+    },
+  },
+  {
+    id: 262,
+    slug: 'kereviz_sapi_cig',
+    name: 'Kereviz Sapı (Çiğ)',
+    category: 'Sebze',
+    calories: 16.6973,
+    protein: 0.4921875,
+    carbs: 3.3165125,
+    fat: 0.1625,
+    sodium_mg_100g: 97.21,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [
+      'Kereviz Sapı',
+      'Celery',
+      'Kereviz (Çiğ)',
+    ],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2346405',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_172). FDC 2346405. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. New USDA-verified food variant; existing Kereviz id 155 was preserved unchanged.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 16.6973,
+      protein: 0.4921875,
+      carbs: 3.3165125,
+      fat: 0.1625,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 97.21,
+    },
+  },
+  {
+    id: 263,
+    slug: 'patates_firin',
+    name: 'Patates (Fırın)',
+    category: 'Sebze',
+    calories: 160.89,
+    protein: 4.325,
+    carbs: 36.589499999999994,
+    fat: 0.22490000000000002,
+    fiber_100g: 2.2,
+    sugar_100g: 1.18,
+    sodium_mg_100g: 10,
+    serving_size: '1 Adet Orta Boy Fırın Patates',
+    serving_grams: 173,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet Orta Boy Fırın Patates',
+        grams: 173,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170093',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_176). FDC 170093. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 93,
+      protein: 2.5,
+      carbs: 21.15,
+      fat: 0.13,
+      fiber: 2.2,
+      sugar: 1.18,
+      sodium_mg: 10,
+    },
+  },
+  {
+    id: 264,
+    slug: 'tatli_patates_firin',
+    name: 'Tatlı Patates (Fırın)',
+    category: 'Sebze',
+    calories: 54,
+    protein: 1.2059999999999997,
+    carbs: 12.426,
+    fat: 0.09,
+    fiber_100g: 3.3,
+    sugar_100g: 6.48,
+    sodium_mg_100g: 36,
+    serving_size: '1 Adet (küçük)',
+    serving_grams: 60,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet (küçük)',
+        grams: 60,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168483',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_177). FDC 168483. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 90,
+      protein: 2.01,
+      carbs: 20.71,
+      fat: 0.15,
+      fiber: 3.3,
+      sugar: 6.48,
+      sodium_mg: 36,
+    },
+  },
+  {
+    id: 265,
+    slug: 'enginar_haslanmis',
+    name: 'Enginar (Haşlanmış)',
+    category: 'Sebze',
+    calories: 63.599999999999994,
+    protein: 3.468,
+    carbs: 14.339999999999998,
+    fat: 0.40800000000000003,
+    fiber_100g: 5.7,
+    sugar_100g: 0.99,
+    sodium_mg_100g: 60,
+    serving_size: '1 Adet Orta Boy Haşlanmış Enginar',
+    serving_grams: 120,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Adet Orta Boy Haşlanmış Enginar',
+        grams: 120,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '168386',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_178). FDC 168386. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 53,
+      protein: 2.89,
+      carbs: 11.95,
+      fat: 0.34,
+      fiber: 5.7,
+      sugar: 0.99,
+      sodium_mg: 60,
+    },
+  },
+  {
+    id: 266,
+    slug: 'pancar_haslanmis',
+    name: 'Pancar (Haşlanmış)',
+    category: 'Sebze',
+    calories: 74.8,
+    protein: 2.856,
+    carbs: 16.932000000000002,
+    fat: 0.306,
+    fiber_100g: 2,
+    sugar_100g: 7.96,
+    sodium_mg_100g: 77,
+    serving_size: '1 Bardak (dilimlenmiş)',
+    serving_grams: 170,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak (dilimlenmiş)',
+        grams: 170,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169146',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_180). FDC 169146. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 44,
+      protein: 1.68,
+      carbs: 9.96,
+      fat: 0.18,
+      fiber: 2,
+      sugar: 7.96,
+      sodium_mg: 77,
+    },
+  },
+  {
+    id: 267,
+    slug: 'lahana_cig',
+    name: 'Lahana (Çiğ)',
+    category: 'Sebze',
+    calories: 22.25,
+    protein: 1.1392,
+    carbs: 5.162,
+    fat: 0.08900000000000001,
+    fiber_100g: 2.5,
+    sugar_100g: 3.2,
+    sodium_mg_100g: 18,
+    serving_size: '1 Bardak (doğranmış)',
+    serving_grams: 89,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak (doğranmış)',
+        grams: 89,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '169975',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_181). FDC 169975. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 25,
+      protein: 1.28,
+      carbs: 5.8,
+      fat: 0.1,
+      fiber: 2.5,
+      sugar: 3.2,
+      sodium_mg: 18,
+    },
+  },
+  {
+    id: 268,
+    slug: 'dana_kiyma_pismis',
+    name: 'Dana Kıyma (Pişmiş)',
+    category: 'Et & Tavuk',
+    calories: 240,
+    protein: 25.07,
+    carbs: 0.62,
+    fat: 14.53,
+    fiber_100g: 0,
+    sugar_100g: 0,
+    sodium_mg_100g: 85,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '172161',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_206). FDC 172161. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 240,
+      protein: 25.07,
+      carbs: 0.62,
+      fat: 14.53,
+      fiber: 0,
+      sugar: 0,
+      sodium_mg: 85,
+    },
+  },
+  {
+    id: 269,
+    slug: 'parmesan_peyniri',
+    name: 'Parmesan Peyniri',
+    category: 'Süt Ürünleri',
+    calories: 392,
+    protein: 35.75,
+    carbs: 3.22,
+    fat: 25,
+    fiber_100g: 0,
+    sugar_100g: 0.11,
+    sodium_mg_100g: 1175,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170848',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_227). FDC 170848. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 392,
+      protein: 35.75,
+      carbs: 3.22,
+      fat: 25,
+      fiber: 0,
+      sugar: 0.11,
+      sodium_mg: 1175,
+    },
+  },
+  {
+    id: 270,
+    slug: 'cheddar_peyniri',
+    name: 'Cheddar Peyniri',
+    category: 'Süt Ürünleri',
+    calories: 69.36,
+    protein: 3.9610000000000003,
+    carbs: 0.4148,
+    fat: 5.78,
+    sugar_100g: 0.33,
+    sodium_mg_100g: 654,
+    serving_size: '1 Dilim',
+    serving_grams: 17,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Dilim',
+        grams: 17,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '328637',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_235). FDC 328637. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 408,
+      protein: 23.3,
+      carbs: 2.44,
+      fat: 34,
+      fiber: null,
+      sugar: 0.33,
+      sodium_mg: 654,
+    },
+  },
+  {
+    id: 271,
+    slug: 'yogurt_yagsiz',
+    name: 'Yoğurt (Yağsız)',
+    category: 'Süt Ürünleri',
+    calories: 50.0015,
+    protein: 4.22675,
+    carbs: 8.07675,
+    fat: 0.0875,
+    sodium_mg_100g: 51.48,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Vejetaryen',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2647437',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_237). FDC 2647437. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 50.0015,
+      protein: 4.22675,
+      carbs: 8.07675,
+      fat: 0.0875,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 51.48,
+    },
+  },
+  {
+    id: 272,
+    slug: 'bulgur_kuru',
+    name: 'Bulgur (Kuru)',
+    category: 'Tahıl & Ekmek',
+    calories: 372.341,
+    protein: 11.75625,
+    carbs: 75.88175,
+    fat: 2.421,
+    fiber_100g: 11.72,
+    sodium_mg_100g: 2.18,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2710820',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_253). FDC 2710820. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 372.341,
+      protein: 11.75625,
+      carbs: 75.88175,
+      fat: 2.421,
+      fiber: 11.72,
+      sugar: null,
+      sodium_mg: 2.18,
+    },
+  },
+  {
+    id: 273,
+    slug: 'bulgur_haslanmis',
+    name: 'Bulgur (Haşlanmış)',
+    category: 'Tahıl & Ekmek',
+    calories: 151.06,
+    protein: 5.6056,
+    carbs: 33.815599999999996,
+    fat: 0.4368,
+    fiber_100g: 4.5,
+    sugar_100g: 0.1,
+    sodium_mg_100g: 5,
+    serving_size: '1 Bardak',
+    serving_grams: 182,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Laktozsuz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Bardak',
+        grams: 182,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '170287',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_254). FDC 170287. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 83,
+      protein: 3.08,
+      carbs: 18.58,
+      fat: 0.24,
+      fiber: 4.5,
+      sugar: 0.1,
+      sodium_mg: 5,
+    },
+  },
+  {
+    id: 274,
+    slug: 'nohut_kuru',
+    name: 'Nohut (Kuru)',
+    category: 'Baklagil',
+    calories: 382.998,
+    protein: 21.275,
+    carbs: 60.358,
+    fat: 6.274,
+    sodium_mg_100g: 8.779,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '2644282',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_287). FDC 2644282. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 382.998,
+      protein: 21.275,
+      carbs: 60.358,
+      fat: 6.274,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 8.779,
+    },
+  },
+  {
+    id: 275,
+    slug: 'hindistan_cevizi_yagi',
+    name: 'Hindistan Cevizi Yağı',
+    category: 'Yağ & Sos',
+    calories: 833,
+    protein: 0,
+    carbs: 0.84,
+    fat: 99.1,
+    sodium_mg_100g: 0,
+    serving_size: '100 Gram',
+    serving_grams: 100,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vegan',
+      'Vejetaryen',
+      'Glutensiz',
+      'Laktozsuz',
+      'Deniz Ürünsüz',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '100 Gram',
+        grams: 100,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '330458',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'foundation_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_311). FDC 330458. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 833,
+      protein: 0,
+      carbs: 0.84,
+      fat: 99.1,
+      fiber: null,
+      sugar: null,
+      sodium_mg: 0,
+    },
+  },
+  {
+    id: 276,
+    slug: 'tereyagi_tuzsuz',
+    name: 'Tereyağı (Tuzsuz)',
+    category: 'Yağ & Sos',
+    calories: 101.814,
+    protein: 0.12069999999999999,
+    carbs: 0.008519999999999998,
+    fat: 11.517619999999999,
+    fiber_100g: 0,
+    sugar_100g: 0.06,
+    sodium_mg_100g: 11,
+    serving_size: '1 Yemek Kaşığı',
+    serving_grams: 14.2,
+    data_source: 'USDA_PREVIEW',
+    tags: [
+      'Vejetaryen',
+      'Glutensiz',
+      'Kuruyemişsiz',
+      'Deniz Ürünsüz',
+      'Keto',
+    ],
+    search_aliases: [],
+    portions: [
+      {
+        label: '1 Yemek Kaşığı',
+        grams: 14.2,
+        is_default: true,
+        source: 'source_verified_usda',
+      },
+    ],
+    review: {
+      source_type: 'USDA',
+      source_name: 'USDA FoodData Central',
+      source_food_id: '173430',
+      review_status: 'usda_officially_verified',
+      source_data_type: 'sr_legacy_food',
+      source_nutrition_basis: 'per_100g',
+      portion_source: 'source_verified_usda',
+      notes: 'USDA dry-run preview (wl_318). FDC 173430. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. No write applied. Add as a distinct food variant.',
+      micronutrient_basic_status: 'fiber_sugar_sodium_verified_usda',
+    },
+    usda_per_100g: {
+      calories: 717,
+      protein: 0.85,
+      carbs: 0.06,
+      fat: 81.11,
+      fiber: 0,
+      sugar: 0.06,
+      sodium_mg: 11,
+    },
+  },
 ]
-/** Legacy export — consumed by foodService, AddMealModal, foodData */
+
 export const FOOD_DB = MASTER_FOOD_DB.map(toLegacyFood)
 
 /** Primary display unit — natural serving label */

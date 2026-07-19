@@ -1,7 +1,8 @@
 /**
- * USDA integration PREVIEW — dry-run merged catalog (276 foods).
- * DO NOT import into the app. Source: scripts/generateUsdaFinalIntegrationPreview.mjs
- * Original untouched catalog: src/utils/foodDatabase.js (240 foods)
+ * Kalorimetre food catalog — USDA-activated local catalog (276 foods).
+ * Activated from scripts/output/foodDatabase.usda-preview.js
+ * Backup: scripts/backups/foodDatabase.pre-usda-activation.js
+ * Rollback: node scripts/rollbackUsdaCatalogActivation.mjs
  */
 
 /** Atwater general factors — reference only; preview calories use USDA per-100g scaling. */

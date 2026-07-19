@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { formatKcal, formatMacro } from '../../utils/nutritionFormat'
 
 const EMPTY_RECOMMENDATIONS = { healthier: [], similar: [], menus: [] }
 
@@ -185,7 +186,7 @@ export default function MacroSummary({
                           <span className="block text-[10px] text-slate-500 dark:text-slate-400">{f.reason}</span>
                         )}
                         <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                          {f.calories ?? f.kcal} kcal · P:{f.protein}g · K:{f.carbs}g · Y:{f.fat}g
+                          {formatKcal(f.calories ?? f.kcal)} kcal · P:{formatMacro(f.protein)}g · K:{formatMacro(f.carbs)}g · Y:{formatMacro(f.fat)}g
                         </span>
                       </button>
                       <div className="flex flex-shrink-0 items-center gap-1">

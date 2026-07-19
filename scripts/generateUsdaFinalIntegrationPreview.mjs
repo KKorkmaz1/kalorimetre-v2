@@ -21,8 +21,70 @@ const PILOT_VALIDATION_MD = join(OUTPUT_DIR, 'pilot_usda_import_validation_repor
 
 const MERGE_PLAN_CSV = join(OUTPUT_DIR, 'usda_final_catalog_merge_plan.csv')
 const PORTION_PREVIEW_CSV = join(OUTPUT_DIR, 'usda_final_portion_merge_preview.csv')
+const TAG_SAFETY_CSV = join(OUTPUT_DIR, 'usda_tag_safety_review.csv')
+const PRECISION_CSV = join(OUTPUT_DIR, 'usda_precision_validation.csv')
+const PORTION_CAVEATS_CSV = join(OUTPUT_DIR, 'usda_remaining_portion_caveats.csv')
 const PREVIEW_DB_PATH = join(OUTPUT_DIR, 'foodDatabase.usda-preview.js')
 const VALIDATION_MD = join(OUTPUT_DIR, 'usda_final_integration_validation.md')
+
+const PORTION_CAVEAT_COLUMNS = [
+  'food_id',
+  'name',
+  'current_default_label',
+  'current_default_grams',
+  'official_portion_label',
+  'official_portion_grams',
+  'difference_percent',
+  'recommended_action',
+  'review_note',
+]
+
+const PRECISION_TOLERANCE = 0.000001
+
+const TAG_SAFETY_COLUMNS = [
+  'food_id',
+  'name',
+  'old_tags',
+  'new_tags',
+  'removed_tags',
+  'added_tags',
+  'tag_review_status',
+  'review_note',
+]
+
+const TAG_CORRECTIONS = {
+  'Tereyağı (Tuzsuz)': {
+    remove: ['Vegan', 'Laktozsuz'],
+    add: ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto'],
+    note: 'Butter is dairy; Vegan and Laktozsuz are invalid without explicit lactose-free source.',
+  },
+  'Bulgur (Kuru)': {
+    remove: ['Glutensiz'],
+    note: 'Bulgur contains gluten; Glutensiz removed.',
+  },
+  'Bulgur (Haşlanmış)': {
+    remove: ['Glutensiz'],
+    note: 'Bulgur contains gluten; Glutensiz removed.',
+  },
+  'Yağsız Süt': {
+    remove: ['Laktozsuz'],
+    add: ['Vejetaryen'],
+    note: 'Skim milk is not lactose-free; Vejetaryen added per existing dairy convention.',
+  },
+  'Yoğurt (Yağsız)': {
+    remove: ['Laktozsuz'],
+    add: ['Vejetaryen'],
+    note: 'Nonfat yogurt is not lactose-free; Vejetaryen added per existing dairy convention.',
+  },
+  'Parmesan Peyniri': {
+    remove: ['Laktozsuz'],
+    note: 'Hard cheese is not lactose-free; Vejetaryen withheld because rennet source is unspecified.',
+  },
+  'Cheddar Peyniri': {
+    remove: ['Laktozsuz'],
+    note: 'Cheddar is not lactose-free; Vejetaryen withheld without rennet/product definition.',
+  },
+}
 
 const ORIGINAL_COUNT = 240
 
@@ -94,10 +156,6 @@ function requireOfficialInputs() {
   if (!existsSync(PILOT_VALIDATION_MD)) {
     fail(`Missing required input: ${PILOT_VALIDATION_MD}`)
   }
-}
-
-function round1(n) {
-  return Math.round(Number(n) * 10) / 10
 }
 
 function parseNum(value) {
@@ -181,6 +239,32 @@ function normalizePortionLabel(label) {
   })
 }
 
+function getSemanticExclusion(row) {
+  if (row.candidate_id === 'wl_119') {
+    return {
+      reason: 'semantic_source_mismatch',
+      note: 'Official FDC 171722 is Cranberries (Turna Yemişi), not Turkish Kızılcık. Excluded; Kızılcık remains a future TÜRKOMP/manual candidate.',
+    }
+  }
+  return null
+}
+
+function resolveSemanticIdentity(row) {
+  if (row.candidate_id === 'wl_172') {
+    return {
+      action: 'add_new_food_variant',
+      existingId: null,
+      displayName: 'Kereviz Sapı (Çiğ)',
+      fixedSlug: 'kereviz_sapi_cig',
+      searchAliases: ['Kereviz Sapı', 'Celery'],
+      identityNote:
+        'Official FDC 2346405 is Celery stalk (Kereviz Sapı), not root Kereviz (id 155). Reclassified to new variant; catalog id 155 remains unchanged.',
+      officialAction: row.catalog_action,
+    }
+  }
+  return null
+}
+
 function isImportReady(row) {
   if (row.source_verification_status !== 'officially_verified') return false
   if (row.review_status !== 'import_ready_review_only') return false
@@ -204,14 +288,30 @@ function microFields(row) {
   }
 }
 
-function servingFromUsda(row, servingGrams) {
+function buildUsdaPer100g(row, micro) {
+  return {
+    calories: parseNum(row.calories_100g),
+    protein: parseNum(row.protein_100g),
+    carbs: parseNum(row.carbs_100g),
+    fat: parseNum(row.fat_100g),
+    fiber: micro.fiber_100g,
+    sugar: micro.sugar_100g,
+    sodium_mg: micro.sodium_mg_100g,
+  }
+}
+
+function scaleFromUsda100g(usdaPer100g, servingGrams) {
   const mult = servingGrams / 100
   return {
-    calories: Math.round(parseNum(row.calories_100g) * mult),
-    protein: round1(parseNum(row.protein_100g) * mult),
-    carbs: round1(parseNum(row.carbs_100g) * mult),
-    fat: round1(parseNum(row.fat_100g) * mult),
+    calories: usdaPer100g.calories * mult,
+    protein: usdaPer100g.protein * mult,
+    carbs: usdaPer100g.carbs * mult,
+    fat: usdaPer100g.fat * mult,
   }
+}
+
+function servingFromUsda(row, servingGrams) {
+  return scaleFromUsda100g(buildUsdaPer100g(row, microFields(row)), servingGrams)
 }
 
 function clarifyDisplayName(row, existing) {
@@ -346,16 +446,20 @@ function resolvePortionPlan(row, resolvedAction, existing) {
   }
 }
 
-function buildReview(row, micro, portionMeta) {
+function buildReview(row, micro, portionMeta, noteOverride) {
+  const detailNote =
+    noteOverride ??
+    (row.import_note ? String(row.import_note).trim() : '')
   const review = {
     source_type: 'USDA',
     source_name: 'USDA FoodData Central',
     source_food_id: String(row.official_fdc_id),
     review_status: 'usda_officially_verified',
     source_data_type: row.data_type || null,
-    nutrition_basis: 'per_100g',
+    source_nutrition_basis: 'per_100g',
     portion_source: portionMeta.portionSource,
-    notes: `USDA dry-run preview (${row.candidate_id}). FDC ${row.official_fdc_id}. ${row.import_note || ''}`.trim(),
+    notes:
+      `USDA dry-run preview (${row.candidate_id}). FDC ${row.official_fdc_id}. Master calories/macros are serving-scaled from exact USDA per-100g; usda_per_100g holds authoritative source values. ${detailNote}`.trim(),
   }
 
   const verified = []
@@ -367,12 +471,158 @@ function buildReview(row, micro, portionMeta) {
   return review
 }
 
-function inferTags(categoryTr) {
-  const base = ['Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz']
-  if (categoryTr.includes('Kuruyemiş')) return ['Vegan', 'Vejetaryen', ...base.filter((t) => t !== 'Kuruyemişsiz')]
-  if (categoryTr === 'Meyve' || categoryTr === 'Sebze' || categoryTr === 'Baharat') return ['Vegan', 'Vejetaryen', ...base]
-  if (categoryTr === 'Yağlar') return ['Vegan', 'Vejetaryen', 'Keto', ...base]
-  return base
+function conservativeNewTags(row) {
+  const cat = String(row.category_tr || '')
+  const name = String(row.name_tr || '').toLocaleLowerCase('tr-TR')
+
+  if (cat.includes('Kuruyemiş') || /kaju|badem|fıstık|ceviz|fındık/.test(name)) {
+    return ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Deniz Ürünsüz']
+  }
+  if (cat === 'Meyve' || cat === 'Sebze' || cat === 'Baharat') {
+    return ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz']
+  }
+  if (cat === 'Yağlar') {
+    if (/tereya|butter|kaymak|krema/.test(name)) {
+      return ['Vejetaryen', 'Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto']
+    }
+    return ['Vegan', 'Vejetaryen', 'Glutensiz', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz', 'Keto']
+  }
+  if (cat.includes('Tahıl') || cat.includes('Ekmek') || /bulgur|makarna|ekmek|buğday/.test(name)) {
+    return ['Vegan', 'Vejetaryen', 'Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz']
+  }
+  if (cat === 'Süt Ürünleri' || /süt|yoğurt|peynir|cheese|milk|yogurt/.test(name)) {
+    return ['Glutensiz', 'Kuruyemişsiz', 'Deniz Ürünsüz']
+  }
+  if (cat.includes('Et') || cat.includes('Tavuk') || cat.includes('Balık')) {
+    return ['Laktozsuz', 'Kuruyemişsiz', 'Deniz Ürünsüz']
+  }
+  return ['Deniz Ürünsüz']
+}
+
+function isDairyFood(displayName, row) {
+  const cat = String(row.category_tr || '')
+  const text = `${displayName} ${row.name_tr || ''}`.toLocaleLowerCase('tr-TR')
+  return cat === 'Süt Ürünleri' || /süt|yoğurt|peynir|tereya|cheese|milk|yogurt|butter|kaymak|krema/.test(text)
+}
+
+function isAnimalFood(row) {
+  const cat = String(row.category_tr || '')
+  return cat.includes('Et') || cat.includes('Tavuk') || cat.includes('Balık')
+}
+
+function isNutFood(displayName, row) {
+  const cat = String(row.category_tr || '')
+  const text = `${displayName} ${row.name_tr || ''}`.toLocaleLowerCase('tr-TR')
+  return (
+    cat.includes('Kuruyemiş') ||
+    /kaju|badem|fıstık|ceviz|fındık|nut|cashew|chia|tohum|seed|fıstık/.test(text)
+  )
+}
+
+function isBulgurFood(displayName) {
+  return /bulgur/i.test(displayName)
+}
+
+function resolveTags({ displayName, row, existingTags, isUpdate }) {
+  const oldTags = isUpdate ? [...(existingTags ?? [])] : conservativeNewTags(row)
+  let newTags = [...oldTags]
+  const removed = []
+  const added = []
+
+  const correction = TAG_CORRECTIONS[displayName]
+  if (correction) {
+    for (const tag of correction.remove ?? []) {
+      if (newTags.includes(tag)) {
+        newTags = newTags.filter((t) => t !== tag)
+        removed.push(tag)
+      }
+    }
+    for (const tag of correction.add ?? []) {
+      if (!newTags.includes(tag)) {
+        newTags.push(tag)
+        added.push(tag)
+      }
+    }
+  }
+
+  const safetyRemovals = [
+    ['Vegan', isDairyFood(displayName, row) || isAnimalFood(row)],
+    ['Laktozsuz', isDairyFood(displayName, row)],
+    ['Glutensiz', isBulgurFood(displayName)],
+    ['Kuruyemişsiz', isNutFood(displayName, row)],
+  ]
+
+  for (const [tag, shouldRemove] of safetyRemovals) {
+    if (shouldRemove && newTags.includes(tag)) {
+      newTags = newTags.filter((t) => t !== tag)
+      if (!removed.includes(tag)) removed.push(tag)
+    }
+  }
+
+  const tagReviewStatus =
+    correction || removed.length || added.length
+      ? removed.length || added.length
+        ? 'corrected_invalid_tag'
+        : 'corrected'
+      : isUpdate
+        ? 'preserved'
+        : 'conservative_default'
+
+  const reviewNote =
+    correction?.note ??
+    (isUpdate
+      ? 'Existing tags preserved unless demonstrably invalid.'
+      : 'Conservative deterministic tags; USDA does not verify dietary/allergen labels.')
+
+  return { tags: newTags, oldTags, removed, added, tagReviewStatus, reviewNote }
+}
+
+function buildPortionsArray(portion, resolvedAction, existing) {
+  if (resolvedAction === 'update_exact_existing_food') {
+    const portions = [
+      {
+        label: existing.serving_size,
+        grams: existing.serving_grams,
+        is_default: true,
+        source: 'local_catalog',
+      },
+    ]
+    const same = portionsAreSame(
+      portion.usdaLabel,
+      portion.usdaGrams,
+      existing.serving_size,
+      existing.serving_grams
+    )
+    if (!same) {
+      let usdaLabel = portion.usdaLabel
+      if (
+        normalizePortionLabel(portion.usdaLabel) === normalizePortionLabel(existing.serving_size) &&
+        portion.usdaGrams !== existing.serving_grams
+      ) {
+        usdaLabel = `${portion.usdaLabel} (USDA ${portion.usdaGrams}g)`
+      }
+      portions.push({
+        label: usdaLabel,
+        grams: portion.usdaGrams,
+        is_default: false,
+        source: 'source_verified_usda',
+      })
+    }
+    return portions
+  }
+
+  return [
+    {
+      label: portion.mergedLabel,
+      grams: portion.mergedGrams,
+      is_default: true,
+      source: 'source_verified_usda',
+    },
+  ]
+}
+
+function portionsAreSame(aLabel, aGrams, bLabel, bGrams) {
+  return normalizePortionLabel(aLabel) === normalizePortionLabel(bLabel) && aGrams === bGrams
 }
 
 function serializeValue(value, indent = 4) {
@@ -414,6 +664,7 @@ function serializeFood(entry) {
     'data_source',
     'tags',
     'search_aliases',
+    'portions',
     'review',
     'usda_per_100g',
   ]) {
@@ -450,30 +701,79 @@ export function parseServingSize(servingSize) {
 export function toLegacyFood(master) {
   const { unit } = parseServingSize(master.serving_size)
   const mult = Math.max(master.serving_grams / 100, 0.01)
+  const source100 = master.usda_per_100g
+  const servingMult = master.serving_grams / 100
+
+  const units = { Gram: 0.01 }
+  if (unit !== 'Gram') units[unit] = mult
+
+  if (Array.isArray(master.portions)) {
+    for (const portion of master.portions) {
+      const { unit: pUnit } = parseServingSize(portion.label)
+      if (pUnit === 'Gram') continue
+      const pMult = Math.max(portion.grams / 100, 0.01)
+      if (!(pUnit in units)) units[pUnit] = pMult
+    }
+  }
+
+  const calories100 = source100?.calories ?? master.calories / mult
+  const protein100 = source100?.protein ?? master.protein / mult
+  const carbs100 = source100?.carbs ?? master.carbs / mult
+  const fat100 = source100?.fat ?? master.fat / mult
+  const fiber100 = source100?.fiber ?? master.fiber_100g ?? null
+  const sugar100 = source100?.sugar ?? master.sugar_100g ?? null
+  const sodium100 = source100?.sodium_mg ?? master.sodium_mg_100g ?? null
+
+  const naturalCalories = source100 ? source100.calories * servingMult : master.calories
+  const naturalProtein = source100 ? source100.protein * servingMult : master.protein
+  const naturalCarbs = source100 ? source100.carbs * servingMult : master.carbs
+  const naturalFat = source100 ? source100.fat * servingMult : master.fat
+  const naturalFiber = fiber100 == null ? null : fiber100 * (source100 ? servingMult : mult)
+  const naturalSugar = sugar100 == null ? null : sugar100 * (source100 ? servingMult : mult)
+  const naturalSodium = sodium100 == null ? null : sodium100 * (source100 ? servingMult : mult)
+
   const legacy = {
     id: master.id,
     slug: master.slug,
     name: master.name,
     category: master.category ?? null,
-    calories: master.calories / mult,
-    protein: master.protein / mult,
-    carbs: master.carbs / mult,
-    fat: master.fat / mult,
-    units: { Gram: 0.01, [unit]: mult },
+    calories: calories100,
+    protein: protein100,
+    carbs: carbs100,
+    fat: fat100,
+    fiber_100g: fiber100,
+    sugar_100g: sugar100,
+    sodium_mg_100g: sodium100,
+    fiber: naturalFiber,
+    sugar: naturalSugar,
+    sodium_mg: naturalSodium,
+    units,
     tags: master.tags ?? [],
     serving_size: master.serving_size,
     data_source: master.data_source,
     review: master.review ?? CATALOG_REVIEW,
     _natural: {
-      calories: master.calories,
-      protein: master.protein,
-      carbs: master.carbs,
-      fat: master.fat,
+      calories: naturalCalories,
+      protein: naturalProtein,
+      carbs: naturalCarbs,
+      fat: naturalFat,
+      fiber_100g: fiber100,
+      sugar_100g: sugar100,
+      sodium_mg_100g: sodium100,
+      fiber: naturalFiber,
+      sugar: naturalSugar,
+      sodium_mg: naturalSodium,
       unit,
       grams: master.serving_grams,
     },
   }
-  if (unit === 'Bardak' || unit === 'Fincan' || unit === 'Su Bardağı') legacy.units.Mililitre = 0.01
+
+  if (master.usda_per_100g) legacy.usda_per_100g = master.usda_per_100g
+
+  if (unit === 'Bardak' || unit === 'Fincan' || unit === 'Su Bardağı') {
+    legacy.units.Mililitre = 0.01
+  }
+
   return legacy
 }
 
@@ -483,6 +783,81 @@ ${catalog.map(serializeFood).join('\n')}
 
 export const FOOD_DB = MASTER_FOOD_DB.map(toLegacyFood)
 `
+}
+
+function buildPortionCaveats(mergedCatalog, portionRows) {
+  const caveats = []
+  const seen = new Set()
+
+  function addCaveat(entry) {
+    const key = `${entry.food_id}:${entry.review_note}`
+    if (seen.has(key)) return
+    seen.add(key)
+    caveats.push(entry)
+  }
+
+  for (const row of portionRows) {
+    const food = mergedCatalog.find((f) => f.id === Number(row.final_catalog_food_id))
+    if (!food) continue
+
+    const currentLabel = row.merged_default_portion_label || row.existing_default_portion_label || food.serving_size
+    const currentGrams = parseNum(row.merged_default_portion_grams || row.existing_default_portion_grams) ?? food.serving_grams
+    const officialLabel = row.usda_portion_label
+    const officialGrams = parseNum(row.usda_portion_grams)
+    if (!currentGrams || !officialGrams) continue
+
+    const diffPercent = Math.round((Math.abs(currentGrams - officialGrams) / officialGrams) * 1000) / 10
+    const samePortion = portionsAreSame(currentLabel, currentGrams, officialLabel, officialGrams)
+
+    if (food.name === 'Kaju (Çiğ)' || row.candidate_id === 'wl_303') {
+      addCaveat({
+        food_id: food.id,
+        name: food.name,
+        current_default_label: currentLabel,
+        current_default_grams: currentGrams,
+        official_portion_label: officialLabel,
+        official_portion_grams: officialGrams,
+        difference_percent: diffPercent,
+        recommended_action: 'manual_portion_review',
+        review_note:
+          'Existing default "1 Kase / 30 g" is semantically questionable for raw cashews; USDA approved 100 Gram only.',
+      })
+      continue
+    }
+
+    if (food.name === 'Espresso' || row.candidate_id === 'wl_012') {
+      addCaveat({
+        food_id: food.id,
+        name: food.name,
+        current_default_label: currentLabel,
+        current_default_grams: currentGrams,
+        official_portion_label: officialLabel,
+        official_portion_grams: officialGrams,
+        difference_percent: diffPercent,
+        recommended_action: 'add_user_friendly_portion',
+        review_note:
+          'Only 100 Gram is currently selected as default; consider a user-friendly espresso serving after manual review.',
+      })
+      continue
+    }
+
+    if (row.catalog_action === 'update_exact_existing_food' && !samePortion && diffPercent >= 5) {
+      addCaveat({
+        food_id: food.id,
+        name: food.name,
+        current_default_label: currentLabel,
+        current_default_grams: currentGrams,
+        official_portion_label: officialLabel,
+        official_portion_grams: officialGrams,
+        difference_percent: diffPercent,
+        recommended_action: 'keep_local_default_review_additional',
+        review_note:
+          'Local default preserved; official USDA portion differs materially and is available as an additional option.',
+      })
+    }
+  }
+
+  return caveats
 }
 
 function micronutrientClaimViolations(food) {
@@ -515,6 +890,7 @@ Generated: ${new Date().toISOString()}
 | Official input row count | ${ctx.officialInputCount} |
 | Included import-ready rows | ${ctx.includedCount} |
 | Excluded / manual rows | ${ctx.excludedRows.length} |
+| Excluded semantic mismatch | ${ctx.excludedSemanticMismatch} |
 | Existing updates (resolved) | ${v.updateCount} |
 | New variants (resolved) | ${v.newCount} |
 | Identity reclassifications | ${ctx.identityReclassifications.length} |
@@ -544,6 +920,17 @@ Generated: ${new Date().toISOString()}
 
 Preview module checks are run separately via \`node scripts/validateUsdaPreview.mjs\`.
 Do **not** treat \`npm run build\` on the live app as preview validation.
+
+## Precision validation
+
+Run \`node scripts/validateUsdaPreview.mjs\` after generation.
+Report output: \`scripts/output/usda_precision_validation.csv\`
+
+| Metric | Status |
+|--------|--------|
+| Exact USDA per-100g equivalence | pending validator run |
+| Precision failures | pending validator run |
+| Non-zero USDA values zeroed | pending validator run |
 
 ## Identity resolutions
 
@@ -582,6 +969,11 @@ function main() {
   const excludedRows = []
   const includedRows = []
   for (const row of pilotRows) {
+    const semantic = getSemanticExclusion(row)
+    if (semantic) {
+      excludedRows.push(`${row.candidate_id} ${row.name_tr} — ${semantic.reason}: ${semantic.note}`)
+      continue
+    }
     if (isImportReady(row)) includedRows.push(row)
     else excludedRows.push(`${row.candidate_id} ${row.name_tr} — not import-ready (${row.review_status}/${row.source_verification_status})`)
   }
@@ -607,12 +999,17 @@ function main() {
   const updatesList = []
   const newList = []
   const blockers = []
+  const tagSafetyRows = []
 
   for (const row of includedRows) {
-    const resolved = resolveCatalogIdentity(row, catalogById, catalogByName, usedNames)
+    const resolved = resolveSemanticIdentity(row) ?? resolveCatalogIdentity(row, catalogById, catalogByName, usedNames)
     if (resolved.officialAction !== resolved.action) {
+      const target =
+        resolved.action === 'update_exact_existing_food'
+          ? `on id ${resolved.existingId}`
+          : 'as new variant'
       identityReclassifications.push(
-        `${row.candidate_id} ${row.name_tr}: official \`${resolved.officialAction}\` → resolved \`${resolved.action}\` on id ${resolved.existingId} (${resolved.identityNote})`
+        `${row.candidate_id} ${row.name_tr}: official \`${resolved.officialAction}\` → resolved \`${resolved.action}\` ${target} (${resolved.identityNote})`
       )
     }
 
@@ -629,6 +1026,12 @@ function main() {
 
       const macros = servingFromUsda(row, existing.serving_grams)
       const atwater = macroCalories(macros.protein, macros.carbs, macros.fat)
+      const tagResult = resolveTags({
+        displayName: newName,
+        row,
+        existingTags: existing.tags,
+        isUpdate: true,
+      })
 
       existing.name = newName
       existing.calories = macros.calories
@@ -642,20 +1045,33 @@ function main() {
       if (micro.sodium_mg_100g != null) existing.sodium_mg_100g = micro.sodium_mg_100g
       else delete existing.sodium_mg_100g
       existing.search_aliases = [...aliases]
+      existing.tags = tagResult.tags
+      existing.portions = buildPortionsArray(portion, resolved.action, existing)
       existing.review = buildReview(row, micro, portion)
-      existing.usda_per_100g = {
-        calories: parseNum(row.calories_100g),
-        protein: parseNum(row.protein_100g),
-        carbs: parseNum(row.carbs_100g),
-        fat: parseNum(row.fat_100g),
-        fiber: micro.fiber_100g,
-        sugar: micro.sugar_100g,
-        sodium_mg: micro.sodium_mg_100g,
-      }
+      existing.usda_per_100g = buildUsdaPer100g(row, micro)
+
+      tagSafetyRows.push({
+        food_id: existing.id,
+        name: newName,
+        old_tags: tagResult.oldTags.join('|'),
+        new_tags: tagResult.tags.join('|'),
+        removed_tags: tagResult.removed.join('|'),
+        added_tags: tagResult.added.join('|'),
+        tag_review_status: tagResult.tagReviewStatus,
+        review_note: tagResult.reviewNote,
+      })
 
       usedNames.delete(oldName)
       usedNames.add(newName)
       updatedFoodIds.add(existing.id)
+
+      const samePortion = portionsAreSame(
+        portion.usdaLabel,
+        portion.usdaGrams,
+        existing.serving_size,
+        existing.serving_grams
+      )
+      const additionalPortion = existing.portions?.find((p) => !p.is_default)
 
       mergePlanRows.push({
         candidate_id: row.candidate_id,
@@ -689,9 +1105,9 @@ function main() {
         merged_default_portion_label: portion.mergedLabel,
         merged_default_portion_grams: portion.mergedGrams,
         default_portion_action: portion.defaultPortionAction,
-        additional_portion_label: portion.usdaLabel,
-        additional_portion_grams: portion.usdaGrams,
-        additional_portion_source: 'source_verified_usda',
+        additional_portion_label: samePortion ? '' : (additionalPortion?.label ?? portion.usdaLabel),
+        additional_portion_grams: samePortion ? '' : portion.usdaGrams,
+        additional_portion_source: samePortion ? '' : 'source_verified_usda',
         portion_source: portion.portionSource,
         portion_merge_note: portion.note,
       })
@@ -701,7 +1117,10 @@ function main() {
     }
 
     const portion = resolvePortionPlan(row, resolved.action, null)
-    let slug = slugify(resolved.displayName)
+    let slug = resolved.fixedSlug ?? slugify(resolved.displayName)
+    if (resolved.fixedSlug && usedSlugs.has(slug)) {
+      fail(`${row.candidate_id}: fixed slug "${slug}" already exists in catalog`)
+    }
     let n = 2
     while (usedSlugs.has(slug)) {
       slug = `${slugify(resolved.displayName)}_${n}`
@@ -716,6 +1135,15 @@ function main() {
     usedNames.add(resolved.displayName)
 
     const macros = servingFromUsda(row, portion.mergedGrams)
+    const tagResult = resolveTags({
+      displayName: resolved.displayName,
+      row,
+      existingTags: [],
+      isUpdate: false,
+    })
+    const aliases = new Set(resolved.searchAliases ?? [])
+    if (row.name_tr && row.name_tr !== resolved.displayName) aliases.add(row.name_tr)
+
     const entry = {
       id: nextId,
       slug,
@@ -728,22 +1156,33 @@ function main() {
       serving_size: portion.mergedLabel,
       serving_grams: portion.mergedGrams,
       data_source: 'USDA_PREVIEW',
-      tags: inferTags(row.category_tr),
-      search_aliases: row.name_tr !== resolved.displayName ? [row.name_tr] : [],
-      review: buildReview(row, micro, portion),
-      usda_per_100g: {
-        calories: parseNum(row.calories_100g),
-        protein: parseNum(row.protein_100g),
-        carbs: parseNum(row.carbs_100g),
-        fat: parseNum(row.fat_100g),
-        fiber: micro.fiber_100g,
-        sugar: micro.sugar_100g,
-        sodium_mg: micro.sodium_mg_100g,
-      },
+      tags: tagResult.tags,
+      search_aliases: [...aliases],
+      portions: buildPortionsArray(portion, resolved.action, null),
+      review: buildReview(
+        row,
+        micro,
+        portion,
+        row.candidate_id === 'wl_172'
+          ? 'New USDA-verified food variant; existing Kereviz id 155 was preserved unchanged.'
+          : undefined
+      ),
+      usda_per_100g: buildUsdaPer100g(row, micro),
     }
     if (micro.fiber_100g != null) entry.fiber_100g = micro.fiber_100g
     if (micro.sugar_100g != null) entry.sugar_100g = micro.sugar_100g
     if (micro.sodium_mg_100g != null) entry.sodium_mg_100g = micro.sodium_mg_100g
+
+    tagSafetyRows.push({
+      food_id: nextId,
+      name: resolved.displayName,
+      old_tags: tagResult.oldTags.join('|'),
+      new_tags: tagResult.tags.join('|'),
+      removed_tags: tagResult.removed.join('|'),
+      added_tags: tagResult.added.join('|'),
+      tag_review_status: tagResult.tagReviewStatus,
+      review_note: tagResult.reviewNote,
+    })
 
     catalogById.set(nextId, entry)
     newFoodIds.push(nextId)
@@ -808,10 +1247,14 @@ function main() {
   for (const row of mergePlanRows) {
     const food = mergedCatalog.find((f) => f.id === Number(row.final_catalog_food_id))
     if (!food?.usda_per_100g?.calories || !food.serving_grams) continue
-    const expected = Math.round(food.usda_per_100g.calories * food.serving_grams / 100)
+    const expected = food.usda_per_100g.calories * food.serving_grams / 100
     const atwater = macroCalories(food.protein, food.carbs, food.fat)
-    if (atwater === food.calories && expected !== atwater) atwaterReplacements.push(`${food.id} ${food.name}`)
+    if (Math.abs(atwater - food.calories) < PRECISION_TOLERANCE && Math.abs(expected - atwater) > PRECISION_TOLERANCE) {
+      atwaterReplacements.push(`${food.id} ${food.name}`)
+    }
   }
+
+  const portionCaveats = buildPortionCaveats(mergedCatalog, portionRows)
 
   const ids = mergedCatalog.map((f) => f.id)
   const slugs = mergedCatalog.map((f) => f.slug)
@@ -834,6 +1277,8 @@ function main() {
 
   writeFileSync(MERGE_PLAN_CSV, `${toCsv(MERGE_PLAN_COLUMNS, mergePlanRows)}\n`, 'utf8')
   writeFileSync(PORTION_PREVIEW_CSV, `${toCsv(PORTION_COLUMNS, portionRows)}\n`, 'utf8')
+  writeFileSync(TAG_SAFETY_CSV, `${toCsv(TAG_SAFETY_COLUMNS, tagSafetyRows)}\n`, 'utf8')
+  writeFileSync(PORTION_CAVEATS_CSV, `${toCsv(PORTION_CAVEAT_COLUMNS, portionCaveats)}\n`, 'utf8')
   writeFileSync(PREVIEW_DB_PATH, renderPreviewDatabase(mergedCatalog, ORIGINAL_COUNT), 'utf8')
   writeFileSync(
     VALIDATION_MD,
@@ -841,6 +1286,7 @@ function main() {
       officialInputCount: pilotRows.length,
       includedCount: includedRows.length,
       excludedRows,
+      excludedSemanticMismatch: excludedRows.filter((x) => x.includes('semantic_source_mismatch')).length,
       identityReclassifications,
       manualPromotions,
       updatesList,
@@ -857,6 +1303,8 @@ function main() {
   console.log(`Merged catalog total: ${validation.catalogTotal}`)
   console.log(`Merge plan → ${MERGE_PLAN_CSV}`)
   console.log(`Portion preview → ${PORTION_PREVIEW_CSV}`)
+  console.log(`Tag safety → ${TAG_SAFETY_CSV}`)
+  console.log(`Portion caveats → ${PORTION_CAVEATS_CSV}`)
   console.log(`Preview DB → ${PREVIEW_DB_PATH}`)
   console.log(`Validation → ${VALIDATION_MD}`)
   if (identityReclassifications.length) {

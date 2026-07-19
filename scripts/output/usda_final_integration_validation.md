@@ -1,6 +1,6 @@
 # USDA Final Integration Validation (Dry Run)
 
-Generated: 2026-07-18T22:30:24.775Z
+Generated: 2026-07-18T23:42:53.079Z
 
 ## Input provenance
 
@@ -14,11 +14,12 @@ Generated: 2026-07-18T22:30:24.775Z
 | Metric | Value |
 |--------|------:|
 | Official input row count | 64 |
-| Included import-ready rows | 64 |
-| Excluded / manual rows | 0 |
-| Existing updates (resolved) | 28 |
+| Included import-ready rows | 63 |
+| Excluded / manual rows | 1 |
+| Excluded semantic mismatch | 1 |
+| Existing updates (resolved) | 27 |
 | New variants (resolved) | 36 |
-| Identity reclassifications | 1 |
+| Identity reclassifications | 2 |
 | Final expected catalog count | 276 (240 original + 36 new) |
 
 ## Integrity checks
@@ -46,13 +47,28 @@ Generated: 2026-07-18T22:30:24.775Z
 Preview module checks are run separately via `node scripts/validateUsdaPreview.mjs`.
 Do **not** treat `npm run build` on the live app as preview validation.
 
+## Precision validation
+
+| Metric | Value |
+|--------|------:|
+| Exact USDA per-100g field checks passed | 441 |
+| Precision failures | 0 |
+| Non-zero USDA values converted to zero | 0 |
+| Precision report | `scripts/output/usda_precision_validation.csv` |
+| Portion caveats | `scripts/output/usda_remaining_portion_caveats.csv` |
+
+All previous semantic, unit, tag and portion checks verified by `validateUsdaPreview.mjs`.
+`src/utils/foodDatabase.js` unchanged. Supabase unchanged. Preview not activated.
+
+
 ## Identity resolutions
 
+- wl_172 Kereviz (Çiğ): official `update_exact_existing_food` → resolved `add_new_food_variant` as new variant (Official FDC 2346405 is Celery stalk (Kereviz Sapı), not root Kereviz (id 155). Reclassified to new variant; catalog id 155 remains unchanged.)
 - wl_303 Kaju: official `add_new_food_variant` → resolved `update_exact_existing_food` on id 216 (Exact display name collision with catalog id 216 "Kaju" — reclassified to update with clarified name)
 
 ## Excluded rows
 
-- None
+- wl_119 Kızılcık — semantic_source_mismatch: Official FDC 171722 is Cranberries (Turna Yemişi), not Turkish Kızılcık. Excluded; Kızılcık remains a future TÜRKOMP/manual candidate.
 
 ## Included updates
 
@@ -74,7 +90,6 @@ Do **not** treat `npm run build` on the live app as preview validation.
 - 66: Salatalık → Salatalık (Çiğ) (wl_168)
 - 65: Domates → Domates (Çiğ) (wl_169)
 - 68: Havuç → Havuç (Çiğ) (wl_170)
-- 155: Kereviz → Kereviz (Çiğ) (wl_172)
 - 6: Haşlanmış Yumurta → Yumurta (Haşlanmış) (wl_209)
 - 174: Sahanda Yumurta → Yumurta (Sahanda) (wl_210)
 - 169: Krem Peynir → Krem Peynir (wl_233)
@@ -97,18 +112,18 @@ Do **not** treat `npm run build` on the live app as preview validation.
 - 248: Çarkıfelek (wl_116)
 - 249: Kuru İncir (wl_117)
 - 250: Kuru Erik (wl_118)
-- 251: Kızılcık (wl_119)
-- 252: Turp (wl_146)
-- 253: Brüksel Lahanası (Haşlanmış) (wl_147)
-- 254: Maydanoz (Taze) (wl_150)
-- 255: Dereotu (Taze) (wl_151)
-- 256: Kırmızı Lahana (Çiğ) (wl_152)
-- 257: Patates (Çiğ) (wl_153)
-- 258: Marul (Iceberg) (wl_157)
-- 259: Ispanak (Haşlanmış) (wl_159)
-- 260: Biber (Kırmızı Çiğ) (wl_166)
-- 261: Biber (Yeşil Çiğ) (wl_167)
-- 262: Havuç (Haşlanmış) (wl_171)
+- 251: Turp (wl_146)
+- 252: Brüksel Lahanası (Haşlanmış) (wl_147)
+- 253: Maydanoz (Taze) (wl_150)
+- 254: Dereotu (Taze) (wl_151)
+- 255: Kırmızı Lahana (Çiğ) (wl_152)
+- 256: Patates (Çiğ) (wl_153)
+- 257: Marul (Iceberg) (wl_157)
+- 258: Ispanak (Haşlanmış) (wl_159)
+- 259: Biber (Kırmızı Çiğ) (wl_166)
+- 260: Biber (Yeşil Çiğ) (wl_167)
+- 261: Havuç (Haşlanmış) (wl_171)
+- 262: Kereviz Sapı (Çiğ) (wl_172)
 - 263: Patates (Fırın) (wl_176)
 - 264: Tatlı Patates (Fırın) (wl_177)
 - 265: Enginar (Haşlanmış) (wl_178)

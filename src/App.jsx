@@ -9,6 +9,7 @@ import Settings from './components/Settings'
 import AddMealModal from './components/AddMealModal'
 import Auth from './components/Auth'
 import { supabase } from './utils/supabaseClient'
+import { formatKcal, formatMacro } from './utils/nutritionFormat'
 
 // ─── SVG icon helpers ─────────────────────────────────────────────────────────
 
@@ -100,10 +101,10 @@ function CalorieRing({ consumed, target }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-xl font-extrabold leading-none text-slate-900 dark:text-slate-100">
-          {consumed.toLocaleString('tr-TR')}
+          {formatKcal(consumed)}
         </span>
         <span className="mt-0.5 text-[10px] font-medium text-slate-400">kcal</span>
-        <span className="text-[9px] text-slate-300 dark:text-night-muted">/ {(target || 0).toLocaleString('tr-TR')}</span>
+        <span className="text-[9px] text-slate-300 dark:text-night-muted">/ {formatKcal(target || 0)}</span>
       </div>
     </div>
   )
@@ -122,8 +123,8 @@ function MacroBar({ label, icon, consumed, target, barColor, labelColor }) {
           {label}
         </span>
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          <span className={`font-bold ${isOver ? 'text-red-500' : 'text-slate-800 dark:text-slate-200'}`}>{consumed}g</span>
-          {' / '}{target}g
+          <span className={`font-bold ${isOver ? 'text-red-500' : 'text-slate-800 dark:text-slate-200'}`}>{formatMacro(consumed)}g</span>
+          {' / '}{formatMacro(target)}g
         </span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-night-muted">
@@ -271,12 +272,12 @@ function MealSlotCard({ slot, target, macroTgt, logs, onAdd }) {
           </div>
           {target > 0 && (
             <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
-              Önerilen: {plannedKcal} kcal · <span className="text-indigo-500 font-semibold">{plannedProt}g Protein</span>
+              Önerilen: {formatKcal(plannedKcal)} kcal · <span className="text-indigo-500 font-semibold">{formatMacro(plannedProt)}g Protein</span>
             </p>
           )}
           {actualKcal > 0 && (
             <p className="mt-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              Toplam: <span className="text-emerald-600 dark:text-emerald-400">{actualKcal} kcal</span>
+              Toplam: <span className="text-emerald-600 dark:text-emerald-400">{formatKcal(actualKcal)} kcal</span>
               {actualLogs.length > 0 && <span className="text-slate-400 font-normal"> · {actualLogs.length} öğe</span>}
             </p>
           )}
@@ -307,7 +308,7 @@ function MealSlotCard({ slot, target, macroTgt, logs, onAdd }) {
               style={{ width: `${pct}%` }} />
           </div>
           <p className="mt-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 text-right">
-            {actualKcal} / {plannedKcal} kcal
+            {formatKcal(actualKcal)} / {formatKcal(plannedKcal)} kcal
           </p>
         </div>
       )}
@@ -343,15 +344,15 @@ function MealSlotCard({ slot, target, macroTgt, logs, onAdd }) {
                     <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-100">{log.name}</p>
                     {(log.protein > 0 || log.carbs > 0 || log.fat > 0) && (
                       <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                        <span className="font-semibold text-indigo-500">P</span> {log.protein}g ·{' '}
-                        <span className="font-semibold text-amber-500">K</span> {log.carbs}g ·{' '}
-                        <span className="font-semibold text-rose-400">Y</span> {log.fat}g
+                        <span className="font-semibold text-indigo-500">P</span> {formatMacro(log.protein)}g ·{' '}
+                        <span className="font-semibold text-amber-500">K</span> {formatMacro(log.carbs)}g ·{' '}
+                        <span className="font-semibold text-rose-400">Y</span> {formatMacro(log.fat)}g
                       </p>
                     )}
                   </div>
                   <span className="flex flex-shrink-0 items-center gap-0.5 text-xs font-extrabold text-slate-700 dark:text-slate-200">
                     <CalorieIcon className="h-3 w-3 text-emerald-500" />
-                    {log.kcal}
+                    {formatKcal(log.kcal)}
                   </span>
                   <button type="button" onClick={() => startEdit(log)}
                     className="flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-300 dark:text-night-muted transition-colors hover:bg-sky-50 dark:hover:bg-sky-900/30 hover:text-sky-500"
@@ -398,16 +399,16 @@ function LogItem({ log, onDelete }) {
         <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{log.name}</p>
         {hasExtras && (
           <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-            <span className="font-semibold text-indigo-500">P</span> {log.protein}g ·{' '}
-            <span className="font-semibold text-amber-500">K</span> {log.carbs}g ·{' '}
-            <span className="font-semibold text-rose-400">Y</span> {log.fat}g
+            <span className="font-semibold text-indigo-500">P</span> {formatMacro(log.protein)}g ·{' '}
+            <span className="font-semibold text-amber-500">K</span> {formatMacro(log.carbs)}g ·{' '}
+            <span className="font-semibold text-rose-400">Y</span> {formatMacro(log.fat)}g
           </p>
         )}
       </div>
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
         <span className="flex items-center gap-1 text-sm font-extrabold text-slate-800 dark:text-slate-100">
           <CalorieIcon className="h-3 w-3 text-emerald-500" />
-          {log.kcal}
+          {formatKcal(log.kcal)}
         </span>
         <button
           type="button" onClick={() => onDelete(log.id)}
@@ -603,7 +604,7 @@ function DashboardView({ onAddMeal, onCompleteProfile }) {
               <div>
                 <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">Yağılan</p>
                 <p className="text-base font-extrabold text-slate-800 dark:text-slate-100">
-                  {consumed.kcal.toLocaleString('tr-TR')}
+                  {formatKcal(consumed.kcal)}
                 </p>
               </div>
               <div>
@@ -673,7 +674,7 @@ function DashboardView({ onAddMeal, onCompleteProfile }) {
           <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Günlük Toplam</span>
           <span className="flex items-center gap-1 text-sm font-extrabold text-slate-900 dark:text-slate-100">
             <CalorieIcon className="h-3.5 w-3.5 text-emerald-500" />
-            {consumed.kcal.toLocaleString('tr-TR')} kcal
+            {formatKcal(consumed.kcal)} kcal
           </span>
         </div>
       )}

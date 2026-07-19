@@ -11,6 +11,7 @@ import BarcodeScanner from './BarcodeScanner'
 import { parseMealTextWithAI, getHealthierAlternatives, estimatePortionWeight } from '../services/aiService'
 import { supabase } from '../utils/supabaseClient'
 import { lookupBarcode } from '../utils/openFoodFacts'
+import { formatKcal, formatMacro, formatWeight } from '../utils/nutritionFormat'
 
 // ─── Serving units (no fixed gram weights — user defines per food) ────────────
 
@@ -1414,11 +1415,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{item.name}</p>
                             <p className="mt-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                              YZ tahmini: {item.grams}g porsiyon
+                              YZ tahmini: {formatWeight(item.grams)}g porsiyon
                             </p>
                           </div>
                           <span className="flex-shrink-0 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
-                            {totalKcal} kcal
+                            {formatKcal(totalKcal)} kcal
                           </span>
                         </div>
 
@@ -1430,7 +1431,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                           ].map(({ label, val, color }) => (
                             <div key={label} className="rounded-lg bg-slate-50 dark:bg-night-muted px-1 py-1.5">
                               <p className={`text-[9px] font-bold ${color}`}>{label}</p>
-                              <p className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100">{val}g</p>
+                              <p className="text-[10px] font-extrabold text-slate-800 dark:text-slate-100">{formatMacro(val)}g</p>
                             </div>
                           ))}
                         </div>
@@ -1447,7 +1448,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                             <span className="text-xs text-slate-400 dark:text-slate-500">gram</span>
                             <button type="button" onClick={() => addAIItemToBasket(item, idx)}
                               className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2 text-xs font-extrabold text-white transition-all hover:bg-emerald-600 active:scale-95">
-                              <PlusIcon /> Sepete Ekle · {totalKcal} kcal
+                              <PlusIcon /> Sepete Ekle · {formatKcal(totalKcal)} kcal
                             </button>
                           </div>
                         </div>
@@ -1500,7 +1501,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100">{menu.name}</p>
                       <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                        {menu.items.length} ürün · {menu.totalKcal} kcal
+                        {menu.items.length} ürün · {formatKcal(menu.totalKcal)} kcal
                       </p>
                     </div>
                     <button type="button" onClick={() => deleteSavedMenu(menu.id)}
@@ -1514,14 +1515,14 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                   <div className="space-y-1">
                     {menu.items.map((item, idx) => (
                       <p key={idx} className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {item.foodName} · {item.kcal} kcal
+                        {item.foodName} · {formatKcal(item.kcal)} kcal
                       </p>
                     ))}
                   </div>
                   <button type="button" onClick={() => applySavedMenu(menu)}
                     className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-xs font-extrabold text-white shadow-sm transition-all hover:bg-emerald-600 active:scale-95">
                     <PlusIcon />
-                    Sepete Ekle · {menu.totalKcal} kcal
+                    Sepete Ekle · {formatKcal(menu.totalKcal)} kcal
                   </button>
                 </div>
               ))}
@@ -1565,7 +1566,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                           <p className="mt-0.5 truncate text-[10px] text-slate-400 dark:text-slate-500">{food.originalName}</p>
                         )}
                         <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                          {food.kcal100} kcal · P:{food.protein100}g K:{food.carbs100}g Y:{food.fat100}g / 100g
+                          {formatKcal(food.kcal100)} kcal · P:{formatMacro(food.protein100)}g K:{formatMacro(food.carbs100)}g Y:{formatMacro(food.fat100)}g / 100g
                         </p>
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-1">
@@ -1670,7 +1671,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                         ].map(({ label, val, color }) => (
                           <div key={label} className="flex-1 rounded-lg bg-slate-50 dark:bg-night-muted px-1 py-1">
                             <p className={`text-[9px] font-extrabold ${color}`}>{label}</p>
-                            <p className="text-[9px] font-bold text-slate-700 dark:text-slate-300">{val}g</p>
+                            <p className="text-[9px] font-bold text-slate-700 dark:text-slate-300">{formatMacro(val)}g</p>
                           </div>
                         ))}
                       </div>
@@ -1685,7 +1686,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                         </svg>
                         Hızlı Ekle
                         <span className="rounded-full bg-emerald-400/40 px-2 py-0.5 text-[9px] font-extrabold">
-                          {quickGrams}g · {quickKcal} kcal
+                          {formatWeight(quickGrams)}g · {formatKcal(quickKcal)} kcal
                         </span>
                       </button>
                     )}
@@ -1769,11 +1770,11 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
                             {serving.unit === 'gram' ? 'gram' : getUnitLabel(serving.unit)}
                           </span>
                           {totalGrams > 0 && (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500">≈ {totalGrams}g</span>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">≈ {formatWeight(totalGrams)}g</span>
                           )}
                           <button type="button" onClick={() => addSavedFoodToBasket(food)}
                             className="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl border border-emerald-300 dark:border-emerald-700 py-1.5 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 transition-all hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:scale-95">
-                            <PlusIcon /> {totalKcal > 0 ? `${totalKcal} kcal ekle` : 'Sepete Ekle'}
+                            <PlusIcon /> {totalKcal > 0 ? `${formatKcal(totalKcal)} kcal ekle` : 'Sepete Ekle'}
                           </button>
                         </div>
                       </div>
@@ -1879,7 +1880,7 @@ export default function AddMealModal({ isOpen, onClose, defaultMealType = null }
           >
             <PlusIcon />
             {basket.length > 0
-              ? `Öğünü Kaydet · ${basketTotals.kcal} kcal`
+              ? `Öğünü Kaydet · ${formatKcal(basketTotals.kcal)} kcal`
               : 'Sepet Boş'}
           </button>
         </div>
